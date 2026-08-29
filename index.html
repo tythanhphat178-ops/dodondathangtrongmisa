@@ -32,18 +32,20 @@
             </div>
         </div>
     </header>
+
     <main class="max-w-7xl mx-auto px-4 py-5 space-y-5">
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex justify-between items-center">
             <div>
                 <h2 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                    <i class="fa-solid signal text-blue-600"></i> Trạng thái đồng bộ kho gốc từ GitHub
+                    <i class="fa-solid fa-signal text-blue-600"></i> Trạng thái đồng bộ kho gốc từ GitHub
                 </h2>
-                <p class="text-[11px] text-slate-500 mt-0.5">Các máy chỉ cần mở trang web hoặc bấm nút cập nhật để lấy dữ liệu mới nhất.</p>
+                <p class="text-[11px] text-slate-500 mt-0.5">Hệ thống quét toàn bộ các sheet và tự động nhận diện cột mã hàng, tồn kho.</p>
             </div>
             <span id="syncStatus" class="text-xs text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg font-medium">
                 <i class="fa-solid fa-rotate animate-spin"></i> Đang tải dữ liệu từ GitHub...
             </span>
         </div>
+
         <div class="bg-gradient-to-r from-blue-50 via-indigo-50 to-white rounded-xl shadow-sm border-2 border-blue-400 p-4">
             <h2 class="text-sm font-bold text-blue-900 uppercase flex items-center gap-2 mb-2">
                 <i class="fa-solid fa-file-invoice text-blue-700"></i> Nạp Đơn Hàng / Toa Hàng Cần Dò
@@ -59,6 +61,7 @@
                 </div>
             </div>
         </div>
+
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
             <div class="flex justify-between items-center mb-3 pb-2 border-b">
                 <h3 class="font-bold text-sm text-slate-800 uppercase">Kết Quả Đối Soát (<span id="resultCount" class="text-blue-600 font-bold">0</span> mã)</h3>
@@ -90,6 +93,7 @@
             </div>
         </div>
     </main>
+
     <script>
         const GITHUB_USER = "tythanhphat178-ops"; 
         const GITHUB_REPO = "dodondathangtrongmisa";      
@@ -105,12 +109,12 @@
             });
         });
 
-        function getBestSheetData(wb) {
+        function getLargestSheetRows(wb) {
             let maxRows = 0;
             let bestRows = [];
             for (let name of wb.SheetNames) {
                 let sheet = wb.Sheets[name];
-                let rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+                let rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
                 if (rows.length > maxRows) {
                     maxRows = rows.length;
                     bestRows = rows;
@@ -124,8 +128,9 @@
             syncEl.className = "text-xs text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg font-medium";
             syncEl.innerHTML = `<i class="fa-solid fa-rotate animate-spin"></i> Đang tải misa.xlsx và sv.xlsx từ GitHub...`;
 
-            const urlMisa = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/misa.xlsx?t=` + new Date().getTime();
-            const urlSv = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/sv.xlsx?t=` + new Date().getTime();
+            const cacheBuster = Date.now();
+            const urlMisa = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/misa.xlsx?v=${cacheBuster}`;
+            const urlSv = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/sv.xlsx?v=${cacheBuster}`;
 
             try {
                 const [resMisa, resSv] = await Promise.all([
@@ -138,14 +143,14 @@
                 if (resMisa && resMisa.ok) {
                     const bufMisa = await resMisa.arrayBuffer();
                     const wbMisa = XLSX.read(new Uint8Array(bufMisa), { type: 'array' });
-                    parseMisaRows(getBestSheetData(wbMisa));
+                    parseUniversalRows(getLargestSheetRows(wbMisa), mapMisa, 'MISA');
                     loadedCount++;
                 }
 
                 if (resSv && resSv.ok) {
                     const bufSv = await resSv.arrayBuffer();
                     const wbSv = XLSX.read(new Uint8Array(bufSv), { type: 'array' });
-                    parseSvRows(getBestSheetData(wbSv));
+                    parseUniversalRows(getLargestSheetRows(wbSv), mapSv, 'SV');
                     loadedCount++;
                 }
 
@@ -171,85 +176,83 @@
             document.getElementById('statSv').innerHTML = `SV: <b class="text-yellow-300">${mapSv.size.toLocaleString()}</b> mã`;
         }
 
-        function parseMisaRows(rows) {
-            mapMisa.clear();
+        function parseUniversalRows(rows, targetMap, sourceLabel) {
+            targetMap.clear();
             if (!rows || rows.length < 2) return;
-            let headerIdx = 0;
-            for(let i=0; i<Math.min(25, rows.length); i++) {
+
+            let headerIdx = -1;
+            let maIdx = -1, tenIdx = -1, dvtIdx = -1, tonIdx = -1;
+
+            for (let i = 0; i < Math.min(30, rows.length); i++) {
                 const r = rows[i].map(c => (c || '').toString().toLowerCase().trim());
-                if(r.some(c => c.includes('mã')) && (r.some(c => c.includes('tên')) || r.some(c => c.includes('tồn')))) {
+                const mIdx = r.findIndex(c => (c.includes('mã') || c.includes('code') || c.includes('vật tư') || c.includes('hàng')) && !c.includes('nhóm') && !c.includes('kho') && !c.includes('loại'));
+                const tIdx = r.findIndex(c => c.includes('tồn cuối') || c.includes('tồn kho') || c.includes('số lượng tồn') || (c.includes('tồn') && !c.includes('đầu')) || c.includes('sl tồn'));
+                
+                if (mIdx !== -1 && (tIdx !== -1 || r.some(c => c.includes('tên')))) {
                     headerIdx = i;
+                    maIdx = mIdx;
+                    tenIdx = r.findIndex(c => c.includes('tên'));
+                    dvtIdx = r.findIndex(c => c.includes('đvt') || c.includes('đơn vị'));
+                    tonIdx = tIdx;
                     break;
                 }
             }
-            const header = rows[headerIdx].map(c => (c || '').toString().toLowerCase().trim());
-            let maIdx = header.findIndex(c => c.includes('mã') && !c.includes('kho') && !c.includes('nhóm'));
-            if (maIdx === -1) maIdx = 1;
-            let tenIdx = header.findIndex(c => c.includes('tên'));
-            if (tenIdx === -1) tenIdx = maIdx + 1;
-            let dvtIdx = header.findIndex(c => c.includes('đvt') || c.includes('đơn vị'));
-            let tonIdx = header.findIndex(c => c.includes('tồn cuối') || c.includes('số lượng tồn') || c.includes('tồn kho') || c.includes('số lượng'));
-            if (tonIdx === -1) tonIdx = rows[headerIdx].length - 1;
 
-            for(let i = headerIdx + 1; i < rows.length; i++) {
+            if (headerIdx === -1) {
+                headerIdx = 0;
+                maIdx = 0;
+                tenIdx = 1;
+                dvtIdx = 2;
+                tonIdx = rows[0].length - 1;
+            }
+
+            if (tonIdx === -1) {
+                tonIdx = rows[headerIdx].length - 1;
+            }
+
+            for (let i = headerIdx + 1; i < rows.length; i++) {
                 const r = rows[i];
-                if(!r || r.length === 0) continue;
+                if (!r || r.length === 0) continue;
+
                 let code = (r[maIdx] || '').toString().trim();
-                if(!code && r.length > 1) {
-                    for(let c = 0; c < Math.min(4, r.length); c++) {
-                        let val = (r[c] || '').toString().trim();
-                        if(val && val.length > 1 && !val.toLowerCase().includes('tổng') && !val.toLowerCase().includes('cộng')) {
-                            code = val; break;
+                
+                if (!code || code.length < 2) {
+                    for (let c = 0; c < Math.min(4, r.length); c++) {
+                        let candidate = (r[c] || '').toString().trim();
+                        if (candidate && candidate.length >= 2 && !candidate.toLowerCase().includes('tổng') && !candidate.toLowerCase().includes('cộng') && !candidate.toLowerCase().includes('stt') && isNaN(candidate)) {
+                            code = candidate;
+                            if (tenIdx <= c) tenIdx = c + 1;
+                            break;
                         }
                     }
                 }
-                if(!code || code.toLowerCase().includes('tổng cộng') || code.toLowerCase().includes('cộng:')) continue;
-                const name = (r[tenIdx] || '').toString().trim();
+
+                if (!code || code.toLowerCase().startsWith('tổng') || code.toLowerCase().startsWith('cộng') || code.toLowerCase().includes('trang ') || code.toLowerCase().includes('ngày ')) continue;
+
+                const name = tenIdx !== -1 ? (r[tenIdx] || '').toString().trim() : '';
                 const dvt = dvtIdx !== -1 ? (r[dvtIdx] || '').toString().trim() : '';
-                const tonStr = (r[tonIdx] || '0').toString().replace(/,/g,'');
-                const ton = parseFloat(tonStr) || 0;
-                mapMisa.set(code.toLowerCase(), { code, name, unit: dvt, tonMisa: ton });
-            }
-        }
-
-        function parseSvRows(rows) {
-            mapSv.clear();
-            if (!rows || rows.length < 2) return;
-            let headerIdx = 0;
-            for(let i = 0; i < Math.min(25, rows.length); i++) {
-                const r = rows[i].map(c => (c || '').toString().toLowerCase().trim());
-                if (r.some(c => c.includes('mã')) && (r.some(c => c.includes('tên')) || r.some(c => c.includes('tồn')))) {
-                    headerIdx = i;
-                    break;
-                }
-            }
-            const header = rows[headerIdx].map(c => (c || '').toString().toLowerCase().trim());
-            let maIdx = header.findIndex(c => c.includes('mã'));
-            if (maIdx === -1) maIdx = 0;
-            let tenIdx = header.findIndex(c => c.includes('tên'));
-            if (tenIdx === -1) tenIdx = 1;
-            let dvtIdx = header.findIndex(c => c.includes('đvt') || c.includes('đơn vị'));
-            let tonIdx = header.findIndex(c => c.includes('tồn cuối') || c.includes('tồn kho') || c.includes('tồn'));
-            if (tonIdx === -1) tonIdx = 6;
-
-            for(let i = headerIdx + 1; i < rows.length; i++) {
-                const r = rows[i];
-                if(!r || r.length === 0) continue;
-                let code = (r[maIdx] || '').toString().trim();
-                if (!code && r.length > 0) {
-                    for (let c = 0; c < Math.min(3, r.length); c++) {
-                        let val = (r[c] || '').toString().trim();
-                        if (val && val.length > 1 && !val.toLowerCase().includes('tổng') && !val.toLowerCase().includes('cộng')) {
-                            code = val; break;
+                
+                let tonStr = (r[tonIdx] || '0').toString().replace(/,/g, '').trim();
+                let ton = parseFloat(tonStr);
+                if (isNaN(ton)) {
+                    for (let col = r.length - 1; col >= 0; col--) {
+                        let val = parseFloat((r[col] || '').toString().replace(/,/g, '').trim());
+                        if (!isNaN(val)) {
+                            ton = val;
+                            break;
                         }
                     }
                 }
-                if(!code || code.toLowerCase().includes('tổng cộng') || code.toLowerCase().includes('cộng:')) continue;
-                const name = (r[tenIdx] || '').toString().trim();
-                const dvt = dvtIdx !== -1 ? (r[dvtIdx] || '').toString().trim() : '';
-                const tonStr = (r[tonIdx] || '0').toString().replace(/,/g,'');
-                const ton = parseFloat(tonStr) || 0;
-                mapSv.set(code.toLowerCase(), { code, name, unit: dvt, tonSv: ton });
+                ton = isNaN(ton) ? 0 : ton;
+
+                const cleanKey = code.toLowerCase().trim();
+                if (cleanKey) {
+                    if (sourceLabel === 'MISA') {
+                        targetMap.set(cleanKey, { code, name, unit: dvt, tonMisa: ton });
+                    } else {
+                        targetMap.set(cleanKey, { code, name, unit: dvt, tonSv: ton });
+                    }
+                }
             }
         }
 
@@ -259,7 +262,7 @@
             reader.onload = e => {
                 const data = new Uint8Array(e.target.result);
                 const wb = XLSX.read(data, { type: 'array' });
-                parseOrderRows(getBestSheetData(wb));
+                parseOrderRows(getLargestSheetRows(wb));
             };
             reader.readAsArrayBuffer(file);
         }
