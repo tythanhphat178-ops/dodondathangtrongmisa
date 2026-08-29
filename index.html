@@ -21,7 +21,7 @@
                 <h1 class="text-lg md:text-xl font-bold flex items-center gap-2">
                     <i class="fa-solid fa-cloud-arrow-down text-yellow-400"></i> HỆ THỐNG ĐỐI SOÁT KHO TỰ ĐỘNG TỪ GITHUB
                 </h1>
-                <p class="text-xs text-blue-200 mt-0.5">Tự động đồng bộ chuẩn cột MISA & SV cho 3 máy (Zero-Cache)</p>
+                <p class="text-xs text-blue-200 mt-0.5">Tự động đồng bộ thời gian thực (Bỏ qua hoàn toàn bộ nhớ đệm)</p>
             </div>
             <div class="flex items-center gap-2 text-xs">
                 <span id="statMisa" class="bg-blue-950 px-3 py-1.5 rounded-lg border border-blue-700">MISA: <b class="text-yellow-300">0</b> mã</span>
@@ -123,13 +123,42 @@
             return bestRows;
         }
 
+        // Tải file trực tiếp qua GitHub Contents API để lấy bản cập nhật mới nhất ngay lập tức
+        async function fetchFileArrayBuffer(fileName, commitSha) {
+            const timestamp = Date.now();
+            try {
+                // Ưu tiên gọi API để lấy file theo mã SHA mới nhất (Không bị dính Cache)
+                const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${fileName}?ref=${commitSha}&t=${timestamp}`;
+                const apiRes = await fetch(apiUrl, { cache: 'no-store' });
+                if (apiRes.ok) {
+                    const data = await apiRes.json();
+                    if (data.content) {
+                        const binaryStr = atob(data.content.replace(/\s/g, ''));
+                        const bytes = new Uint8Array(binaryStr.length);
+                        for (let i = 0; i < binaryStr.length; i++) {
+                            bytes[i] = binaryStr.charCodeAt(i);
+                        }
+                        return bytes.buffer;
+                    }
+                }
+            } catch (err) {
+                console.warn(`API fetch fallback for ${fileName}:`, err);
+            }
+
+            // Phương án dự phòng trực tiếp
+            const rawUrl = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/${commitSha}/${fileName}?t=${timestamp}`;
+            const res = await fetch(rawUrl, { cache: 'no-store' });
+            if (res.ok) return await res.arrayBuffer();
+            return null;
+        }
+
         async function loadDataFromGitHub() {
             const syncEl = document.getElementById('syncStatus');
             syncEl.className = "text-xs text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg font-medium";
-            syncEl.innerHTML = `<i class="fa-solid fa-rotate animate-spin"></i> Đang lấy mã bản cập nhật mới nhất từ GitHub...`;
+            syncEl.innerHTML = `<i class="fa-solid fa-rotate animate-spin"></i> Đang kiểm tra bản cập nhật mới nhất...`;
 
             try {
-                // 1. Lấy mã SHA của lần commit mới nhất (tránh 100% cache máy chủ Fastly)
+                // 1. Lấy mã SHA của commit mới nhất
                 let commitSha = 'main';
                 try {
                     const resCommit = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/commits/main?t=${Date.now()}`, {
@@ -141,31 +170,26 @@
                         commitSha = commitData.sha;
                     }
                 } catch(e) {
-                    console.warn("Dùng branch main mặc định", e);
+                    console.warn("Dùng branch main", e);
                 }
 
-                syncEl.innerHTML = `<i class="fa-solid fa-rotate animate-spin"></i> Đang nạp dữ liệu bản mới nhất [${commitSha.substring(0,7)}]...`;
+                syncEl.innerHTML = `<i class="fa-solid fa-rotate animate-spin"></i> Đang tải dữ liệu [Commit: ${commitSha.substring(0,7)}]...`;
 
-                // 2. Tải trực tiếp file theo SHA (Luôn luôn là file mới nhất)
-                const urlMisa = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/${commitSha}/misa.xlsx?t=${Date.now()}`;
-                const urlSv = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/${commitSha}/sv.xlsx?t=${Date.now()}`;
-
-                const [resMisa, resSv] = await Promise.all([
-                    fetch(urlMisa, { cache: 'no-store' }).catch(e => null),
-                    fetch(urlSv, { cache: 'no-store' }).catch(e => null)
+                // 2. Tải 2 file song song không qua Cache
+                const [bufMisa, bufSv] = await Promise.all([
+                    fetchFileArrayBuffer('misa.xlsx', commitSha),
+                    fetchFileArrayBuffer('sv.xlsx', commitSha)
                 ]);
 
                 let loadedCount = 0;
 
-                if (resMisa && resMisa.ok) {
-                    const bufMisa = await resMisa.arrayBuffer();
+                if (bufMisa) {
                     const wbMisa = XLSX.read(new Uint8Array(bufMisa), { type: 'array' });
                     parseMisaDirect(getLargestSheetRows(wbMisa));
                     loadedCount++;
                 }
 
-                if (resSv && resSv.ok) {
-                    const bufSv = await resSv.arrayBuffer();
+                if (bufSv) {
                     const wbSv = XLSX.read(new Uint8Array(bufSv), { type: 'array' });
                     parseSvDirect(getLargestSheetRows(wbSv));
                     loadedCount++;
@@ -175,7 +199,7 @@
 
                 if (loadedCount > 0) {
                     syncEl.className = "text-xs text-emerald-700 bg-emerald-50 border border-emerald-300 px-3 py-1.5 rounded-lg font-bold";
-                    syncEl.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-600"></i> Đã đồng bộ bản mới (${mapSv.size.toLocaleString()} mã SV, ${mapMisa.size.toLocaleString()} mã MISA)`;
+                    syncEl.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-600"></i> Đã đồng bộ mới nhất (${mapSv.size.toLocaleString()} mã SV, ${mapMisa.size.toLocaleString()} mã MISA)`;
                     if(currentOrderRows.length > 0) recomputeAll();
                 } else {
                     syncEl.className = "text-xs text-amber-700 bg-amber-50 border border-amber-300 px-3 py-1.5 rounded-lg font-medium";
