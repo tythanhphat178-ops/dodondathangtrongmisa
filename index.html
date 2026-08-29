@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="google" content="notranslate">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>⚡ Đối Soát Kho Online (MISA & SV) qua GitHub</title>
+    <title>⚡ Đối Soát Kho Online (MISA & SV)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -19,33 +19,48 @@
         <div class="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-center gap-3">
             <div>
                 <h1 class="text-lg md:text-xl font-bold flex items-center gap-2">
-                    <i class="fa-solid fa-cloud-arrow-down text-yellow-400"></i> HỆ THỐNG ĐỐI SOÁT KHO TỰ ĐỘNG TỪ GITHUB
+                    <i class="fa-solid fa-boxes-stacked text-yellow-400"></i> HỆ THỐNG ĐỐI SOÁT KHO TỰ ĐỘNG
                 </h1>
-                <p class="text-xs text-blue-200 mt-0.5">Tự động đồng bộ thời gian thực (Bỏ qua hoàn toàn bộ nhớ đệm)</p>
+                <p class="text-xs text-blue-200 mt-0.5">Đồng bộ tự động từ GitHub hoặc Chọn file trực tiếp tại chỗ</p>
             </div>
             <div class="flex items-center gap-2 text-xs">
                 <span id="statMisa" class="bg-blue-950 px-3 py-1.5 rounded-lg border border-blue-700">MISA: <b class="text-yellow-300">0</b> mã</span>
                 <span id="statSv" class="bg-blue-950 px-3 py-1.5 rounded-lg border border-blue-700">SV: <b class="text-yellow-300">0</b> mã</span>
                 <button onclick="loadDataFromGitHub()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-1.5 rounded-lg transition shadow">
-                    <i class="fa-solid fa-rotate"></i> Cập Nhật Lại Dữ Liệu
+                    <i class="fa-solid fa-rotate"></i> Lấy Từ GitHub
                 </button>
             </div>
         </div>
     </header>
 
-    <main class="max-w-7xl mx-auto px-4 py-5 space-y-5">
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex justify-between items-center">
-            <div>
-                <h2 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                    <i class="fa-solid fa-signal text-blue-600"></i> Trạng thái đồng bộ kho gốc từ GitHub
-                </h2>
-                <p class="text-[11px] text-slate-500 mt-0.5">Dữ liệu đọc chuẩn Cột B & F (MISA) | Cột A & G (SV - Tồn cuối)</p>
+    <main class="max-w-7xl mx-auto px-4 py-5 space-y-4">
+        <!-- Khung trạng thái & Tùy chọn nạp nhanh tại máy -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 pb-3 border-b border-slate-100">
+                <div>
+                    <h2 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                        <i class="fa-solid fa-signal text-blue-600"></i> Trạng thái đồng bộ dữ liệu
+                    </h2>
+                    <span id="syncStatus" class="inline-block mt-1 text-xs text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded font-medium">
+                        Đang chờ kết nối...
+                    </span>
+                </div>
+                <!-- Nạp nhanh file trực tiếp nếu GitHub chưa kịp nhả cache -->
+                <div class="flex flex-wrap items-center gap-2 text-xs">
+                    <span class="text-slate-500 font-semibold">Nạp nhanh từ máy:</span>
+                    <label class="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 px-2.5 py-1 rounded">
+                        <i class="fa-solid fa-file-excel text-blue-600"></i> Nạp MISA
+                        <input type="file" id="localMisa" accept=".xlsx,.xls" class="hidden">
+                    </label>
+                    <label class="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 px-2.5 py-1 rounded">
+                        <i class="fa-solid fa-file-excel text-emerald-600"></i> Nạp SV
+                        <input type="file" id="localSv" accept=".xlsx,.xls" class="hidden">
+                    </label>
+                </div>
             </div>
-            <span id="syncStatus" class="text-xs text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg font-medium">
-                <i class="fa-solid fa-rotate animate-spin"></i> Đang tải dữ liệu từ GitHub...
-            </span>
         </div>
 
+        <!-- Khung nạp toa hàng -->
         <div class="bg-gradient-to-r from-blue-50 via-indigo-50 to-white rounded-xl shadow-sm border-2 border-blue-400 p-4">
             <h2 class="text-sm font-bold text-blue-900 uppercase flex items-center gap-2 mb-2">
                 <i class="fa-solid fa-file-invoice text-blue-700"></i> Nạp Đơn Hàng / Toa Hàng Cần Dò
@@ -62,6 +77,7 @@
             </div>
         </div>
 
+        <!-- Khung kết quả -->
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
             <div class="flex justify-between items-center mb-3 pb-2 border-b">
                 <h3 class="font-bold text-sm text-slate-800 uppercase">Kết Quả Đối Soát (<span id="resultCount" class="text-blue-600 font-bold">0</span> mã)</h3>
@@ -87,7 +103,7 @@
                         </tr>
                     </thead>
                     <tbody id="resultTbody">
-                        <tr><td colspan="11" class="p-6 text-center text-slate-400 italic">Đang chờ tải dữ liệu kho gốc...</td></tr>
+                        <tr><td colspan="11" class="p-6 text-center text-slate-400 italic">Đang chờ nạp dữ liệu kho...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -107,6 +123,35 @@
             document.getElementById('pasteOrderInput').addEventListener('input', e => {
                 if(e.target.value.trim()) parseOrderRows(e.target.value.split('\n').map(l => l.split('\t')));
             });
+
+            // Lắng nghe nạp trực tiếp từng file nếu muốn kiểm tra tức thì
+            document.getElementById('localMisa').addEventListener('change', e => {
+                const f = e.target.files[0];
+                if (!f) return;
+                const r = new FileReader();
+                r.onload = ev => {
+                    const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+                    parseMisaDirect(getLargestSheetRows(wb));
+                    updateStats();
+                    if(currentOrderRows.length > 0) recomputeAll();
+                    document.getElementById('syncStatus').innerText = `Đã nạp trực tiếp MISA từ máy (${mapMisa.size.toLocaleString()} mã)`;
+                };
+                r.readAsArrayBuffer(f);
+            });
+
+            document.getElementById('localSv').addEventListener('change', e => {
+                const f = e.target.files[0];
+                if (!f) return;
+                const r = new FileReader();
+                r.onload = ev => {
+                    const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+                    parseSvDirect(getLargestSheetRows(wb));
+                    updateStats();
+                    if(currentOrderRows.length > 0) recomputeAll();
+                    document.getElementById('syncStatus').innerText = `Đã nạp trực tiếp SV từ máy (${mapSv.size.toLocaleString()} mã)`;
+                };
+                r.readAsArrayBuffer(f);
+            });
         });
 
         function getLargestSheetRows(wb) {
@@ -123,92 +168,47 @@
             return bestRows;
         }
 
-        // Tải file trực tiếp qua GitHub Contents API để lấy bản cập nhật mới nhất ngay lập tức
-        async function fetchFileArrayBuffer(fileName, commitSha) {
-            const timestamp = Date.now();
-            try {
-                // Ưu tiên gọi API để lấy file theo mã SHA mới nhất (Không bị dính Cache)
-                const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${fileName}?ref=${commitSha}&t=${timestamp}`;
-                const apiRes = await fetch(apiUrl, { cache: 'no-store' });
-                if (apiRes.ok) {
-                    const data = await apiRes.json();
-                    if (data.content) {
-                        const binaryStr = atob(data.content.replace(/\s/g, ''));
-                        const bytes = new Uint8Array(binaryStr.length);
-                        for (let i = 0; i < binaryStr.length; i++) {
-                            bytes[i] = binaryStr.charCodeAt(i);
-                        }
-                        return bytes.buffer;
-                    }
-                }
-            } catch (err) {
-                console.warn(`API fetch fallback for ${fileName}:`, err);
-            }
-
-            // Phương án dự phòng trực tiếp
-            const rawUrl = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/${commitSha}/${fileName}?t=${timestamp}`;
-            const res = await fetch(rawUrl, { cache: 'no-store' });
-            if (res.ok) return await res.arrayBuffer();
-            return null;
-        }
-
         async function loadDataFromGitHub() {
             const syncEl = document.getElementById('syncStatus');
-            syncEl.className = "text-xs text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg font-medium";
-            syncEl.innerHTML = `<i class="fa-solid fa-rotate animate-spin"></i> Đang kiểm tra bản cập nhật mới nhất...`;
+            syncEl.className = "inline-block mt-1 text-xs text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded font-medium";
+            syncEl.innerHTML = `<i class="fa-solid fa-rotate animate-spin"></i> Đang tải dữ liệu từ GitHub...`;
+
+            const uniqueKey = Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+            const urlMisa = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/misa.xlsx?nocache=${uniqueKey}`;
+            const urlSv = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/sv.xlsx?nocache=${uniqueKey}`;
 
             try {
-                // 1. Lấy mã SHA của commit mới nhất
-                let commitSha = 'main';
-                try {
-                    const resCommit = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/commits/main?t=${Date.now()}`, {
-                        headers: { 'Accept': 'application/vnd.github.v3+json' },
-                        cache: 'no-store'
-                    });
-                    if (resCommit.ok) {
-                        const commitData = await resCommit.json();
-                        commitSha = commitData.sha;
-                    }
-                } catch(e) {
-                    console.warn("Dùng branch main", e);
-                }
-
-                syncEl.innerHTML = `<i class="fa-solid fa-rotate animate-spin"></i> Đang tải dữ liệu [Commit: ${commitSha.substring(0,7)}]...`;
-
-                // 2. Tải 2 file song song không qua Cache
-                const [bufMisa, bufSv] = await Promise.all([
-                    fetchFileArrayBuffer('misa.xlsx', commitSha),
-                    fetchFileArrayBuffer('sv.xlsx', commitSha)
+                const [resMisa, resSv] = await Promise.all([
+                    fetch(urlMisa, { cache: 'reload', headers: { 'Pragma': 'no-cache', 'Cache-Control': 'no-cache' } }).catch(() => null),
+                    fetch(urlSv, { cache: 'reload', headers: { 'Pragma': 'no-cache', 'Cache-Control': 'no-cache' } }).catch(() => null)
                 ]);
 
-                let loadedCount = 0;
-
-                if (bufMisa) {
-                    const wbMisa = XLSX.read(new Uint8Array(bufMisa), { type: 'array' });
+                let loaded = 0;
+                if (resMisa && resMisa.ok) {
+                    const wbMisa = XLSX.read(new Uint8Array(await resMisa.arrayBuffer()), { type: 'array' });
                     parseMisaDirect(getLargestSheetRows(wbMisa));
-                    loadedCount++;
+                    loaded++;
                 }
 
-                if (bufSv) {
-                    const wbSv = XLSX.read(new Uint8Array(bufSv), { type: 'array' });
+                if (resSv && resSv.ok) {
+                    const wbSv = XLSX.read(new Uint8Array(await resSv.arrayBuffer()), { type: 'array' });
                     parseSvDirect(getLargestSheetRows(wbSv));
-                    loadedCount++;
+                    loaded++;
                 }
 
                 updateStats();
 
-                if (loadedCount > 0) {
-                    syncEl.className = "text-xs text-emerald-700 bg-emerald-50 border border-emerald-300 px-3 py-1.5 rounded-lg font-bold";
-                    syncEl.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-600"></i> Đã đồng bộ mới nhất (${mapSv.size.toLocaleString()} mã SV, ${mapMisa.size.toLocaleString()} mã MISA)`;
+                if (loaded > 0) {
+                    syncEl.className = "inline-block mt-1 text-xs text-emerald-700 bg-emerald-50 border border-emerald-300 px-2.5 py-1 rounded font-bold";
+                    syncEl.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-600"></i> Đã đồng bộ: ${mapSv.size.toLocaleString()} mã SV | ${mapMisa.size.toLocaleString()} mã MISA`;
                     if(currentOrderRows.length > 0) recomputeAll();
                 } else {
-                    syncEl.className = "text-xs text-amber-700 bg-amber-50 border border-amber-300 px-3 py-1.5 rounded-lg font-medium";
-                    syncEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-amber-600"></i> Không tìm thấy file misa.xlsx hoặc sv.xlsx trên GitHub.`;
+                    syncEl.className = "inline-block mt-1 text-xs text-amber-700 bg-amber-50 border border-amber-300 px-2.5 py-1 rounded font-medium";
+                    syncEl.innerHTML = `Chưa tìm thấy file trên GitHub. Bạn có thể dùng nút "Nạp nhanh từ máy" ở bên phải.`;
                 }
-
-            } catch (e) {
-                syncEl.className = "text-xs text-red-700 bg-red-50 border border-red-300 px-3 py-1.5 rounded-lg font-medium";
-                syncEl.innerHTML = `<i class="fa-solid fa-circle-xmark text-red-600"></i> Lỗi kết nối GitHub: ${e.message}`;
+            } catch (err) {
+                syncEl.className = "inline-block mt-1 text-xs text-red-700 bg-red-50 border border-red-300 px-2.5 py-1 rounded font-medium";
+                syncEl.innerHTML = `Lỗi mạng: ${err.message}`;
             }
         }
 
@@ -217,18 +217,14 @@
             document.getElementById('statSv').innerHTML = `SV: <b class="text-yellow-300">${mapSv.size.toLocaleString()}</b> mã`;
         }
 
-        // Đọc MISA: Cột B (Mã), Cột C (Tên), Cột E (ĐVT), Cột F (SL Tồn)
         function parseMisaDirect(rows) {
             mapMisa.clear();
             if (!rows || rows.length === 0) return;
-
             for (let i = 0; i < rows.length; i++) {
                 const r = rows[i];
                 if (!r || r.length === 0) continue;
-
                 let code = (r[1] !== undefined && r[1] !== null ? r[1].toString() : '').trim();
                 let lowerCode = code.toLowerCase();
-
                 if (!code || lowerCode === 'mã' || lowerCode.includes('danh sách') || lowerCode.startsWith('tổng')) continue;
 
                 let name = (r[2] !== undefined && r[2] !== null ? r[2].toString() : '').trim();
@@ -240,18 +236,14 @@
             }
         }
 
-        // Đọc SV: Cột A (Mã), Cột B (Tên), Cột C (ĐVT), Cột G (Tồn Cuối)
         function parseSvDirect(rows) {
             mapSv.clear();
             if (!rows || rows.length === 0) return;
-
             for (let i = 0; i < rows.length; i++) {
                 const r = rows[i];
                 if (!r || r.length === 0) continue;
-
                 let code = (r[0] !== undefined && r[0] !== null ? r[0].toString() : '').trim();
                 let lowerCode = code.toLowerCase();
-
                 if (!code || lowerCode.includes('mã') || lowerCode.startsWith('tổng')) continue;
 
                 let name = (r[1] !== undefined && r[1] !== null ? r[1].toString() : '').trim();
