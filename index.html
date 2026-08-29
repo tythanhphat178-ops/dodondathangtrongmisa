@@ -91,12 +91,12 @@
         </div>
     </main>
     <script>
-        // Cấu hình đúng tên kho 'dodondathangtrongmisa' của bạn
         const GITHUB_USER = "tythanhphat178-ops"; 
         const GITHUB_REPO = "dodondathangtrongmisa";      
         let mapMisa = new Map();
         let mapSv = new Map();
         let currentOrderRows = [];
+
         window.addEventListener('DOMContentLoaded', () => {
             loadDataFromGitHub();
             document.getElementById('fileOrder').addEventListener('change', e => handleOrderFile(e.target.files[0]));
@@ -104,53 +104,78 @@
                 if(e.target.value.trim()) parseOrderRows(e.target.value.split('\n').map(l => l.split('\t')));
             });
         });
+
+        function getBestSheetData(wb) {
+            let maxRows = 0;
+            let bestRows = [];
+            for (let name of wb.SheetNames) {
+                let sheet = wb.Sheets[name];
+                let rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+                if (rows.length > maxRows) {
+                    maxRows = rows.length;
+                    bestRows = rows;
+                }
+            }
+            return bestRows;
+        }
+
         async function loadDataFromGitHub() {
             const syncEl = document.getElementById('syncStatus');
             syncEl.className = "text-xs text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg font-medium";
             syncEl.innerHTML = `<i class="fa-solid fa-rotate animate-spin"></i> Đang tải misa.xlsx và sv.xlsx từ GitHub...`;
+
             const urlMisa = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/misa.xlsx?t=` + new Date().getTime();
             const urlSv = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/sv.xlsx?t=` + new Date().getTime();
+
             try {
                 const [resMisa, resSv] = await Promise.all([
                     fetch(urlMisa).catch(e => null),
                     fetch(urlSv).catch(e => null)
                 ]);
+
                 let loadedCount = 0;
+
                 if (resMisa && resMisa.ok) {
                     const bufMisa = await resMisa.arrayBuffer();
                     const wbMisa = XLSX.read(new Uint8Array(bufMisa), { type: 'array' });
-                    parseMisaRows(XLSX.utils.sheet_to_json(wbMisa.Sheets[wbMisa.SheetNames[0]], { header: 1 }));
+                    parseMisaRows(getBestSheetData(wbMisa));
                     loadedCount++;
                 }
+
                 if (resSv && resSv.ok) {
                     const bufSv = await resSv.arrayBuffer();
                     const wbSv = XLSX.read(new Uint8Array(bufSv), { type: 'array' });
-                    parseSvRows(XLSX.utils.sheet_to_json(wbSv.Sheets[wbSv.SheetNames[0]], { header: 1 }));
+                    parseSvRows(getBestSheetData(wbSv));
                     loadedCount++;
                 }
+
                 updateStats();
+
                 if (loadedCount > 0) {
                     syncEl.className = "text-xs text-emerald-700 bg-emerald-50 border border-emerald-300 px-3 py-1.5 rounded-lg font-bold";
                     syncEl.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-600"></i> Đã đồng bộ thành công (${mapSv.size.toLocaleString()} mã SV, ${mapMisa.size.toLocaleString()} mã MISA)`;
                     if(currentOrderRows.length > 0) recomputeAll();
                 } else {
                     syncEl.className = "text-xs text-amber-700 bg-amber-50 border border-amber-300 px-3 py-1.5 rounded-lg font-medium";
-                    syncEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-amber-600"></i> Chưa thấy file misa.xlsx hoặc sv.xlsx trên GitHub. Hãy upload 2 file lên nhé.`;
+                    syncEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-amber-600"></i> Không tìm thấy file trên GitHub.`;
                 }
+
             } catch (e) {
                 syncEl.className = "text-xs text-red-700 bg-red-50 border border-red-300 px-3 py-1.5 rounded-lg font-medium";
                 syncEl.innerHTML = `<i class="fa-solid fa-circle-xmark text-red-600"></i> Lỗi kết nối GitHub: ${e.message}`;
             }
         }
+
         function updateStats() {
             document.getElementById('statMisa').innerHTML = `MISA: <b class="text-yellow-300">${mapMisa.size.toLocaleString()}</b> mã`;
             document.getElementById('statSv').innerHTML = `SV: <b class="text-yellow-300">${mapSv.size.toLocaleString()}</b> mã`;
         }
+
         function parseMisaRows(rows) {
             mapMisa.clear();
             if (!rows || rows.length < 2) return;
             let headerIdx = 0;
-            for(let i=0; i<Math.min(15, rows.length); i++) {
+            for(let i=0; i<Math.min(25, rows.length); i++) {
                 const r = rows[i].map(c => (c || '').toString().toLowerCase().trim());
                 if(r.some(c => c.includes('mã')) && (r.some(c => c.includes('tên')) || r.some(c => c.includes('tồn')))) {
                     headerIdx = i;
@@ -158,14 +183,14 @@
                 }
             }
             const header = rows[headerIdx].map(c => (c || '').toString().toLowerCase().trim());
-            let maIdx = header.findIndex(c => c.includes('mã') && !c.includes('lượng') && !c.includes('kho'));
+            let maIdx = header.findIndex(c => c.includes('mã') && !c.includes('kho') && !c.includes('nhóm'));
             if (maIdx === -1) maIdx = 1;
             let tenIdx = header.findIndex(c => c.includes('tên'));
-            if (tenIdx === -1) tenIdx = 2;
+            if (tenIdx === -1) tenIdx = maIdx + 1;
             let dvtIdx = header.findIndex(c => c.includes('đvt') || c.includes('đơn vị'));
-            if (dvtIdx === -1) dvtIdx = 4;
-            let tonIdx = header.findIndex(c => c.includes('tồn') || c.includes('số lượng'));
-            if (tonIdx === -1) tonIdx = 5;
+            let tonIdx = header.findIndex(c => c.includes('tồn cuối') || c.includes('số lượng tồn') || c.includes('tồn kho') || c.includes('số lượng'));
+            if (tonIdx === -1) tonIdx = rows[headerIdx].length - 1;
+
             for(let i = headerIdx + 1; i < rows.length; i++) {
                 const r = rows[i];
                 if(!r || r.length === 0) continue;
@@ -178,19 +203,20 @@
                         }
                     }
                 }
-                if(!code || code.toLowerCase().includes('tổng cộng') || code.toLowerCase().includes('cộng')) continue;
-                const name = (r[tenIdx] || r[maIdx + 1] || '').toString().trim();
-                const dvt = (r[dvtIdx] || '').toString().trim();
-                const tonStr = (r[tonIdx] || r[r.length - 1] || '0').toString().replace(/,/g,'');
+                if(!code || code.toLowerCase().includes('tổng cộng') || code.toLowerCase().includes('cộng:')) continue;
+                const name = (r[tenIdx] || '').toString().trim();
+                const dvt = dvtIdx !== -1 ? (r[dvtIdx] || '').toString().trim() : '';
+                const tonStr = (r[tonIdx] || '0').toString().replace(/,/g,'');
                 const ton = parseFloat(tonStr) || 0;
                 mapMisa.set(code.toLowerCase(), { code, name, unit: dvt, tonMisa: ton });
             }
         }
+
         function parseSvRows(rows) {
             mapSv.clear();
             if (!rows || rows.length < 2) return;
             let headerIdx = 0;
-            for(let i = 0; i < Math.min(15, rows.length); i++) {
+            for(let i = 0; i < Math.min(25, rows.length); i++) {
                 const r = rows[i].map(c => (c || '').toString().toLowerCase().trim());
                 if (r.some(c => c.includes('mã')) && (r.some(c => c.includes('tên')) || r.some(c => c.includes('tồn')))) {
                     headerIdx = i;
@@ -203,9 +229,9 @@
             let tenIdx = header.findIndex(c => c.includes('tên'));
             if (tenIdx === -1) tenIdx = 1;
             let dvtIdx = header.findIndex(c => c.includes('đvt') || c.includes('đơn vị'));
-            if (dvtIdx === -1) dvtIdx = 2;
             let tonIdx = header.findIndex(c => c.includes('tồn cuối') || c.includes('tồn kho') || c.includes('tồn'));
             if (tonIdx === -1) tonIdx = 6;
+
             for(let i = headerIdx + 1; i < rows.length; i++) {
                 const r = rows[i];
                 if(!r || r.length === 0) continue;
@@ -218,24 +244,26 @@
                         }
                     }
                 }
-                if(!code || code.toLowerCase().includes('tổng cộng') || code.toLowerCase().includes('cộng')) continue;
+                if(!code || code.toLowerCase().includes('tổng cộng') || code.toLowerCase().includes('cộng:')) continue;
                 const name = (r[tenIdx] || '').toString().trim();
-                const dvt = (r[dvtIdx] || '').toString().trim();
+                const dvt = dvtIdx !== -1 ? (r[dvtIdx] || '').toString().trim() : '';
                 const tonStr = (r[tonIdx] || '0').toString().replace(/,/g,'');
                 const ton = parseFloat(tonStr) || 0;
                 mapSv.set(code.toLowerCase(), { code, name, unit: dvt, tonSv: ton });
             }
         }
+
         function handleOrderFile(file) {
             if(!file) return;
             const reader = new FileReader();
             reader.onload = e => {
                 const data = new Uint8Array(e.target.result);
                 const wb = XLSX.read(data, { type: 'array' });
-                parseOrderRows(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 }));
+                parseOrderRows(getBestSheetData(wb));
             };
             reader.readAsArrayBuffer(file);
         }
+
         function parseOrderRows(rows) {
             currentOrderRows = [];
             for(let i=1; i<rows.length; i++) {
@@ -249,6 +277,7 @@
             }
             recomputeAll();
         }
+
         function recomputeAll() {
             currentOrderRows.forEach(r => {
                 const key = r.code.toLowerCase().trim();
@@ -258,6 +287,7 @@
                 r.tonSv = s ? s.tonSv : 0;
                 r.total = r.qty + r.tonSv;
                 r.diff = r.total - r.tonMisa;
+
                 if (!s && !m) { r.decision = '🟡 CẢNH BÁO'; r.reason = 'Mã mới chưa có tồn'; r.status = 'WARN'; }
                 else if (r.tonMisa === r.tonSv || r.diff > 3) { r.decision = '🟢 XUẤT HÀNG'; r.reason = 'Đủ điều kiện xuất'; r.status = 'PASS'; }
                 else { r.decision = '🔴 TỪ CHỐI'; r.reason = 'Lệch tồn kho không đủ điều kiện'; r.status = 'FAIL'; }
@@ -265,6 +295,7 @@
             document.getElementById('btnExport').disabled = currentOrderRows.length === 0;
             renderTable();
         }
+
         function renderTable() {
             const tbody = document.getElementById('resultTbody');
             document.getElementById('resultCount').innerText = currentOrderRows.length;
@@ -288,6 +319,7 @@
                 </tr>
             `).join('');
         }
+
         function exportResultExcel() {
             if(currentOrderRows.length === 0) return;
             const ws = XLSX.utils.json_to_sheet(currentOrderRows.map((r,i)=>({
