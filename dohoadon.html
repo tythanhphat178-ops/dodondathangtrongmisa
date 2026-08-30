@@ -1431,7 +1431,11 @@
       // SIRIUS 9G 183.5-184 Thailand"). Nếu KHÔNG có trong danh sách, token "Bánh" bị hiểu
       // nhầm là 1 phần của TÊN HÀNG (bị chèn lẫn vào giữa tên do dòng số liệu tách rời khỏi
       // dòng tên hàng nhiều dòng), còn ĐVT trả về mặc định sai thành "Chiếc".
-      const UNIT_TOKEN_RE_PDF = /^(chiếc|cái|con|bộ|bình|lít|hộp|kg|mét|lô|cuộn|tấm|lon|chai|can|xô|phuy|cụm|thùng|gói|bao|kiện|đôi|túi|bó|vỉ|ống|tá|cây|sợi|cặp|tuýp|tuyp|hũ|hủ|thanh|viên|chùm|ly|xấp|bánh)$/i;
+      // [v35] Bổ sung ĐVT "Vĩ" (dấu NGÃ - dùng cho hàng cao su/nhựa dạng tấm rời, ví dụ "CAO
+      // SU QUAI DÈ" bán theo "Vĩ"), KHÁC với "Vỉ" (dấu HỎI, đã có sẵn - dùng cho vỉ thuốc/vỉ
+      // linh kiện). 2 từ này khác nghĩa nhưng dễ nhầm lẫn khi gõ dấu; nếu thiếu "vĩ", token
+      // ĐVT này bị nuốt nhầm vào cuối TÊN HÀNG, còn ĐVT trả về mặc định sai thành "Chiếc".
+      const UNIT_TOKEN_RE_PDF = /^(chiếc|cái|con|bộ|bình|lít|hộp|kg|mét|lô|cuộn|tấm|lon|chai|can|xô|phuy|cụm|thùng|gói|bao|kiện|đôi|túi|bó|vỉ|vĩ|ống|tá|cây|sợi|cặp|tuýp|tuyp|hũ|hủ|thanh|viên|chùm|ly|xấp|bánh)$/i;
       const STOP_RE_PDF = /^(STT|CỘNG(\s|:|$)|CỘNG TIỀN|Thuế$|THUẾ SUẤT|TỔNG TIỀN|TỔNG SỐ LƯỢNG|SỐ TIỀN|NGƯỜI MUA|NGƯỜI BÁN|KÝ BỞI|TRA CỨU|PHÁT HÀNH|TRANG|CÔNG TY|MÃ SỐ THUẾ|ĐỊA CHỈ|ĐIỆN THOẠI|HÓA ĐƠN|VAT INVOICE|TIỀN TRƯỚC THUẾ|TỔNG CỘNG|TỔNG HỢP|TỔNG TIỀN KHÔNG KÊ KHAI|TIỀN KHÔNG CHỊU THUẾ|TIỀN CHỊU THUẾ SUẤT|Số tiền viết|Mã CQT|Mẫu số|Ký hiệu|Số:|Cộng tiền hàng|Tra cứu tại|Phát hành bởi|Signature|Ký ngày|Ký bởi)/i;
 
       // [v19 - Mẫu MISA meInvoice "Mai Thảo" và tương tự] Tiêu đề bảng bị chia thành NHIỀU
@@ -1497,7 +1501,16 @@
         base = String(base || ''); frag = String(frag || '').trim();
         if (!base) return frag;
         if (!frag) return base;
-        if (/[-(]$/.test(base)) return base + frag;
+        // Nối liền KHÔNG thêm khoảng trắng khi:
+        // - base kết thúc bằng "(" (mở ngoặc luôn dính liền ký tự theo sau, không cần cách).
+        // - base kết thúc bằng "-" DÍNH LIỀN vào 1 ký tự chữ/số ngay trước nó, tức mã phụ tùng
+        //   bị ngắt dòng giữa chừng (VD "43110-" + "16H20V000" -> "43110-16H20V000").
+        // [Bugfix] Nếu dấu "-" ở cuối base lại ĐỨNG RIÊNG (có khoảng trắng ngay trước nó, ví dụ
+        // cụm "Xe Bạc 3 -" dùng dấu gạch ngang như 1 ký hiệu phân cách trong "Xe Bạc 3 - 791"),
+        // đây KHÔNG phải mã bị ngắt dòng nên vẫn cần thêm khoảng trắng khi nối - nếu không sẽ
+        // dính sai thành "3 -791" thay vì đúng "3 - 791" như trên hóa đơn gốc.
+        if (/\($/.test(base)) return base + frag;
+        if (/[^\s-]-$/.test(base)) return base + frag;
         return base + ' ' + frag;
       }
 
