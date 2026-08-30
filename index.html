@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="google" content="notranslate">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>⚡ Đối Soát Kho Online (MISA & SV)</title>
+    <title>⚡ Đối Soát Kho Online (Tự Lưu Dữ Liệu)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -19,48 +19,47 @@
         <div class="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-center gap-3">
             <div>
                 <h1 class="text-lg md:text-xl font-bold flex items-center gap-2">
-                    <i class="fa-solid fa-boxes-stacked text-yellow-400"></i> HỆ THỐNG ĐỐI SOÁT KHO TỰ ĐỘNG
+                    <i class="fa-solid fa-boxes-stacked text-yellow-400"></i> HỆ THỐNG ĐỐI SOÁT KHO (TỰ LƯU DỮ LIỆU)
                 </h1>
-                <p class="text-xs text-blue-200 mt-0.5">Đồng bộ tự động từ GitHub hoặc Chọn file trực tiếp tại chỗ</p>
+                <p class="text-xs text-blue-200 mt-0.5">Dữ liệu tự động lưu vĩnh viễn trên máy cho đến khi bạn nạp file mới</p>
             </div>
             <div class="flex items-center gap-2 text-xs">
                 <span id="statMisa" class="bg-blue-950 px-3 py-1.5 rounded-lg border border-blue-700">MISA: <b class="text-yellow-300">0</b> mã</span>
                 <span id="statSv" class="bg-blue-950 px-3 py-1.5 rounded-lg border border-blue-700">SV: <b class="text-yellow-300">0</b> mã</span>
                 <button onclick="loadDataFromGitHub()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-1.5 rounded-lg transition shadow">
-                    <i class="fa-solid fa-rotate"></i> Lấy Từ GitHub
+                    <i class="fa-solid fa-cloud-arrow-down"></i> Tải Lại Từ GitHub
                 </button>
             </div>
         </div>
     </header>
 
     <main class="max-w-7xl mx-auto px-4 py-5 space-y-4">
-        <!-- Khung trạng thái & Tùy chọn nạp nhanh tại máy -->
+        <!-- Khung trạng thái & Nút nạp file thủ công -->
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 pb-3 border-b border-slate-100">
                 <div>
                     <h2 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                        <i class="fa-solid fa-signal text-blue-600"></i> Trạng thái đồng bộ dữ liệu
+                        <i class="fa-solid fa-signal text-blue-600"></i> Trạng thái bộ nhớ kho
                     </h2>
                     <span id="syncStatus" class="inline-block mt-1 text-xs text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded font-medium">
-                        Đang chờ kết nối...
+                        Đang khởi tạo...
                     </span>
                 </div>
-                <!-- Nạp nhanh file trực tiếp nếu GitHub chưa kịp nhả cache -->
                 <div class="flex flex-wrap items-center gap-2 text-xs">
-                    <span class="text-slate-500 font-semibold">Nạp nhanh từ máy:</span>
-                    <label class="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 px-2.5 py-1 rounded">
-                        <i class="fa-solid fa-file-excel text-blue-600"></i> Nạp MISA
+                    <span class="text-slate-500 font-semibold">Nạp file cập nhật mới:</span>
+                    <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded shadow">
+                        <i class="fa-solid fa-file-excel"></i> Chọn file MISA
                         <input type="file" id="localMisa" accept=".xlsx,.xls" class="hidden">
                     </label>
-                    <label class="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 px-2.5 py-1 rounded">
-                        <i class="fa-solid fa-file-excel text-emerald-600"></i> Nạp SV
+                    <label class="cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded shadow">
+                        <i class="fa-solid fa-file-excel"></i> Chọn file SV
                         <input type="file" id="localSv" accept=".xlsx,.xls" class="hidden">
                     </label>
                 </div>
             </div>
         </div>
 
-        <!-- Khung nạp toa hàng -->
+        <!-- Khung nạp toa hàng cần dò -->
         <div class="bg-gradient-to-r from-blue-50 via-indigo-50 to-white rounded-xl shadow-sm border-2 border-blue-400 p-4">
             <h2 class="text-sm font-bold text-blue-900 uppercase flex items-center gap-2 mb-2">
                 <i class="fa-solid fa-file-invoice text-blue-700"></i> Nạp Đơn Hàng / Toa Hàng Cần Dò
@@ -103,7 +102,7 @@
                         </tr>
                     </thead>
                     <tbody id="resultTbody">
-                        <tr><td colspan="11" class="p-6 text-center text-slate-400 italic">Đang chờ nạp dữ liệu kho...</td></tr>
+                        <tr><td colspan="11" class="p-6 text-center text-slate-400 italic">Chưa có dữ liệu đơn hàng.</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -118,13 +117,15 @@
         let currentOrderRows = [];
 
         window.addEventListener('DOMContentLoaded', () => {
-            loadDataFromGitHub();
+            // Tự động khôi phục dữ liệu đã lưu sẵn trong máy
+            loadFromLocalStorage();
+
             document.getElementById('fileOrder').addEventListener('change', e => handleOrderFile(e.target.files[0]));
             document.getElementById('pasteOrderInput').addEventListener('input', e => {
                 if(e.target.value.trim()) parseOrderRows(e.target.value.split('\n').map(l => l.split('\t')));
             });
 
-            // Lắng nghe nạp trực tiếp từng file nếu muốn kiểm tra tức thì
+            // Nạp file MISA mới từ máy và lưu vĩnh viễn
             document.getElementById('localMisa').addEventListener('change', e => {
                 const f = e.target.files[0];
                 if (!f) return;
@@ -132,13 +133,15 @@
                 r.onload = ev => {
                     const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
                     parseMisaDirect(getLargestSheetRows(wb));
+                    saveToLocalStorage();
                     updateStats();
                     if(currentOrderRows.length > 0) recomputeAll();
-                    document.getElementById('syncStatus').innerText = `Đã nạp trực tiếp MISA từ máy (${mapMisa.size.toLocaleString()} mã)`;
+                    document.getElementById('syncStatus').innerHTML = `<span class="text-emerald-700 font-bold"><i class="fa-solid fa-check"></i> Đã cập nhật & lưu vĩnh viễn file MISA mới (${mapMisa.size.toLocaleString()} mã)</span>`;
                 };
                 r.readAsArrayBuffer(f);
             });
 
+            // Nạp file SV mới từ máy và lưu vĩnh viễn
             document.getElementById('localSv').addEventListener('change', e => {
                 const f = e.target.files[0];
                 if (!f) return;
@@ -146,13 +149,43 @@
                 r.onload = ev => {
                     const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
                     parseSvDirect(getLargestSheetRows(wb));
+                    saveToLocalStorage();
                     updateStats();
                     if(currentOrderRows.length > 0) recomputeAll();
-                    document.getElementById('syncStatus').innerText = `Đã nạp trực tiếp SV từ máy (${mapSv.size.toLocaleString()} mã)`;
+                    document.getElementById('syncStatus').innerHTML = `<span class="text-emerald-700 font-bold"><i class="fa-solid fa-check"></i> Đã cập nhật & lưu vĩnh viễn file SV mới (${mapSv.size.toLocaleString()} mã)</span>`;
                 };
                 r.readAsArrayBuffer(f);
             });
         });
+
+        function saveToLocalStorage() {
+            try {
+                const misaArr = Array.from(mapMisa.entries());
+                const svArr = Array.from(mapSv.entries());
+                localStorage.setItem('saved_misa_data', JSON.stringify(misaArr));
+                localStorage.setItem('saved_sv_data', JSON.stringify(svArr));
+            } catch(e) {
+                console.warn("Không thể lưu local storage:", e);
+            }
+        }
+
+        function loadFromLocalStorage() {
+            try {
+                const misaData = localStorage.getItem('saved_misa_data');
+                const svData = localStorage.getItem('saved_sv_data');
+                if (misaData && svData) {
+                    mapMisa = new Map(JSON.parse(misaData));
+                    mapSv = new Map(JSON.parse(svData));
+                    updateStats();
+                    document.getElementById('syncStatus').innerHTML = `<span class="text-emerald-700 font-bold"><i class="fa-solid fa-check-circle"></i> Đang dùng dữ liệu đã lưu sẵn trên máy (${mapSv.size.toLocaleString()} mã SV, ${mapMisa.size.toLocaleString()} mã MISA)</span>`;
+                    return true;
+                }
+            } catch(e) {
+                console.warn("Lỗi đọc bộ nhớ máy:", e);
+            }
+            loadDataFromGitHub();
+            return false;
+        }
 
         function getLargestSheetRows(wb) {
             let maxRows = 0;
@@ -170,17 +203,16 @@
 
         async function loadDataFromGitHub() {
             const syncEl = document.getElementById('syncStatus');
-            syncEl.className = "inline-block mt-1 text-xs text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded font-medium";
             syncEl.innerHTML = `<i class="fa-solid fa-rotate animate-spin"></i> Đang tải dữ liệu từ GitHub...`;
 
-            const uniqueKey = Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+            const uniqueKey = Date.now();
             const urlMisa = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/misa.xlsx?nocache=${uniqueKey}`;
             const urlSv = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/sv.xlsx?nocache=${uniqueKey}`;
 
             try {
                 const [resMisa, resSv] = await Promise.all([
-                    fetch(urlMisa, { cache: 'reload', headers: { 'Pragma': 'no-cache', 'Cache-Control': 'no-cache' } }).catch(() => null),
-                    fetch(urlSv, { cache: 'reload', headers: { 'Pragma': 'no-cache', 'Cache-Control': 'no-cache' } }).catch(() => null)
+                    fetch(urlMisa, { cache: 'reload' }).catch(() => null),
+                    fetch(urlSv, { cache: 'reload' }).catch(() => null)
                 ]);
 
                 let loaded = 0;
@@ -196,19 +228,16 @@
                     loaded++;
                 }
 
-                updateStats();
-
                 if (loaded > 0) {
-                    syncEl.className = "inline-block mt-1 text-xs text-emerald-700 bg-emerald-50 border border-emerald-300 px-2.5 py-1 rounded font-bold";
-                    syncEl.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-600"></i> Đã đồng bộ: ${mapSv.size.toLocaleString()} mã SV | ${mapMisa.size.toLocaleString()} mã MISA`;
+                    saveToLocalStorage();
+                    updateStats();
+                    syncEl.innerHTML = `<span class="text-emerald-700 font-bold">Đã đồng bộ từ GitHub (${mapSv.size.toLocaleString()} mã SV, ${mapMisa.size.toLocaleString()} mã MISA)</span>`;
                     if(currentOrderRows.length > 0) recomputeAll();
                 } else {
-                    syncEl.className = "inline-block mt-1 text-xs text-amber-700 bg-amber-50 border border-amber-300 px-2.5 py-1 rounded font-medium";
-                    syncEl.innerHTML = `Chưa tìm thấy file trên GitHub. Bạn có thể dùng nút "Nạp nhanh từ máy" ở bên phải.`;
+                    syncEl.innerHTML = `<span class="text-amber-700">Chưa có dữ liệu sẵn. Vui lòng bấm chọn file MISA/SV ở trên để nạp.</span>`;
                 }
             } catch (err) {
-                syncEl.className = "inline-block mt-1 text-xs text-red-700 bg-red-50 border border-red-300 px-2.5 py-1 rounded font-medium";
-                syncEl.innerHTML = `Lỗi mạng: ${err.message}`;
+                syncEl.innerHTML = `<span class="text-red-700">Lỗi kết nối: ${err.message}</span>`;
             }
         }
 
@@ -217,6 +246,7 @@
             document.getElementById('statSv').innerHTML = `SV: <b class="text-yellow-300">${mapSv.size.toLocaleString()}</b> mã`;
         }
 
+        // Đọc MISA: Cột B (Mã), Cột C (Tên), Cột E (ĐVT), Cột F (SL Tồn)
         function parseMisaDirect(rows) {
             mapMisa.clear();
             if (!rows || rows.length === 0) return;
@@ -236,6 +266,7 @@
             }
         }
 
+        // Đọc SV: Cột A (Mã), Cột B (Tên), Cột C (ĐVT), Cột G (Tồn Cuối)
         function parseSvDirect(rows) {
             mapSv.clear();
             if (!rows || rows.length === 0) return;
