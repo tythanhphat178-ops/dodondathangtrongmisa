@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="google" content="notranslate">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>⚡ Đối Soát Kho Online (Tự Lưu Dữ Liệu)</title>
+    <title>⚡ Đối Soát Kho Online</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -19,22 +19,23 @@
         <div class="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-center gap-3">
             <div>
                 <h1 class="text-lg md:text-xl font-bold flex items-center gap-2">
-                    <i class="fa-solid fa-boxes-stacked text-yellow-400"></i> HỆ THỐNG ĐỐI SOÁT KHO (TỰ LƯU DỮ LIỆU)
+                    <i class="fa-solid fa-boxes-stacked text-yellow-400"></i> HỆ THỐNG ĐỐI SOÁT KHO ONLINE
                 </h1>
-                <p class="text-xs text-blue-200 mt-0.5">Dữ liệu tự động lưu vĩnh viễn trên máy cho đến khi bạn nạp file mới</p>
+                <p class="text-xs text-blue-200 mt-0.5">Tự động đồng bộ từ GitHub cho các máy</p>
             </div>
             <div class="flex items-center gap-2 text-xs">
                 <span id="statMisa" class="bg-blue-950 px-3 py-1.5 rounded-lg border border-blue-700">MISA: <b class="text-yellow-300">0</b> mã</span>
                 <span id="statSv" class="bg-blue-950 px-3 py-1.5 rounded-lg border border-blue-700">SV: <b class="text-yellow-300">0</b> mã</span>
-                <button onclick="loadDataFromGitHub()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-1.5 rounded-lg transition shadow">
-                    <i class="fa-solid fa-cloud-arrow-down"></i> Tải Lại Từ GitHub
+                <!-- Nút Tải mới từ GitHub và Xóa bộ nhớ cũ -->
+                <button onclick="forceReloadFromGitHub()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-1.5 rounded-lg transition shadow">
+                    <i class="fa-solid fa-rotate"></i> Cập Nhật Lại Dữ Liệu Mới
                 </button>
             </div>
         </div>
     </header>
 
     <main class="max-w-7xl mx-auto px-4 py-5 space-y-4">
-        <!-- Khung trạng thái & Nút nạp file thủ công -->
+        <!-- Khung trạng thái & Tùy chọn nạp file thủ công dự phòng -->
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 pb-3 border-b border-slate-100">
                 <div>
@@ -46,13 +47,13 @@
                     </span>
                 </div>
                 <div class="flex flex-wrap items-center gap-2 text-xs">
-                    <span class="text-slate-500 font-semibold">Nạp file cập nhật mới:</span>
+                    <span class="text-slate-500 font-semibold">Hoặc chọn file trực tiếp:</span>
                     <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded shadow">
-                        <i class="fa-solid fa-file-excel"></i> Chọn file MISA
+                        <i class="fa-solid fa-file-excel"></i> Chọn MISA
                         <input type="file" id="localMisa" accept=".xlsx,.xls" class="hidden">
                     </label>
                     <label class="cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded shadow">
-                        <i class="fa-solid fa-file-excel"></i> Chọn file SV
+                        <i class="fa-solid fa-file-excel"></i> Chọn SV
                         <input type="file" id="localSv" accept=".xlsx,.xls" class="hidden">
                     </label>
                 </div>
@@ -117,7 +118,6 @@
         let currentOrderRows = [];
 
         window.addEventListener('DOMContentLoaded', () => {
-            // Tự động khôi phục dữ liệu đã lưu sẵn trong máy
             loadFromLocalStorage();
 
             document.getElementById('fileOrder').addEventListener('change', e => handleOrderFile(e.target.files[0]));
@@ -125,7 +125,6 @@
                 if(e.target.value.trim()) parseOrderRows(e.target.value.split('\n').map(l => l.split('\t')));
             });
 
-            // Nạp file MISA mới từ máy và lưu vĩnh viễn
             document.getElementById('localMisa').addEventListener('change', e => {
                 const f = e.target.files[0];
                 if (!f) return;
@@ -136,12 +135,11 @@
                     saveToLocalStorage();
                     updateStats();
                     if(currentOrderRows.length > 0) recomputeAll();
-                    document.getElementById('syncStatus').innerHTML = `<span class="text-emerald-700 font-bold"><i class="fa-solid fa-check"></i> Đã cập nhật & lưu vĩnh viễn file MISA mới (${mapMisa.size.toLocaleString()} mã)</span>`;
+                    document.getElementById('syncStatus').innerHTML = `<span class="text-emerald-700 font-bold"><i class="fa-solid fa-check"></i> Đã nạp trực tiếp file MISA (${mapMisa.size.toLocaleString()} mã)</span>`;
                 };
                 r.readAsArrayBuffer(f);
             });
 
-            // Nạp file SV mới từ máy và lưu vĩnh viễn
             document.getElementById('localSv').addEventListener('change', e => {
                 const f = e.target.files[0];
                 if (!f) return;
@@ -152,7 +150,7 @@
                     saveToLocalStorage();
                     updateStats();
                     if(currentOrderRows.length > 0) recomputeAll();
-                    document.getElementById('syncStatus').innerHTML = `<span class="text-emerald-700 font-bold"><i class="fa-solid fa-check"></i> Đã cập nhật & lưu vĩnh viễn file SV mới (${mapSv.size.toLocaleString()} mã)</span>`;
+                    document.getElementById('syncStatus').innerHTML = `<span class="text-emerald-700 font-bold"><i class="fa-solid fa-check"></i> Đã nạp trực tiếp file SV (${mapSv.size.toLocaleString()} mã)</span>`;
                 };
                 r.readAsArrayBuffer(f);
             });
@@ -165,7 +163,7 @@
                 localStorage.setItem('saved_misa_data', JSON.stringify(misaArr));
                 localStorage.setItem('saved_sv_data', JSON.stringify(svArr));
             } catch(e) {
-                console.warn("Không thể lưu local storage:", e);
+                console.warn("Không thể lưu cache máy:", e);
             }
         }
 
@@ -177,14 +175,23 @@
                     mapMisa = new Map(JSON.parse(misaData));
                     mapSv = new Map(JSON.parse(svData));
                     updateStats();
-                    document.getElementById('syncStatus').innerHTML = `<span class="text-emerald-700 font-bold"><i class="fa-solid fa-check-circle"></i> Đang dùng dữ liệu đã lưu sẵn trên máy (${mapSv.size.toLocaleString()} mã SV, ${mapMisa.size.toLocaleString()} mã MISA)</span>`;
+                    document.getElementById('syncStatus').innerHTML = `<span class="text-blue-700 font-medium"><i class="fa-solid fa-database"></i> Đang dùng dữ liệu đã lưu trong máy (${mapSv.size.toLocaleString()} mã SV, ${mapMisa.size.toLocaleString()} mã MISA). Bấm "Cập Nhật Lại Dữ Liệu Mới" nếu vừa đổi file trên GitHub.</span>`;
                     return true;
                 }
             } catch(e) {
-                console.warn("Lỗi đọc bộ nhớ máy:", e);
+                console.warn("Lỗi đọc bộ nhớ:", e);
             }
             loadDataFromGitHub();
             return false;
+        }
+
+        // Bấm nút này để xóa sạch dữ liệu cũ trong máy và tải chuẩn file mới từ GitHub
+        function forceReloadFromGitHub() {
+            localStorage.removeItem('saved_misa_data');
+            localStorage.removeItem('saved_sv_data');
+            mapMisa.clear();
+            mapSv.clear();
+            loadDataFromGitHub();
         }
 
         function getLargestSheetRows(wb) {
@@ -203,7 +210,7 @@
 
         async function loadDataFromGitHub() {
             const syncEl = document.getElementById('syncStatus');
-            syncEl.innerHTML = `<i class="fa-solid fa-rotate animate-spin"></i> Đang tải dữ liệu từ GitHub...`;
+            syncEl.innerHTML = `<i class="fa-solid fa-rotate animate-spin"></i> Đang tải file mới nhất trực tiếp từ GitHub (bỏ qua bộ nhớ đệm)...`;
 
             const uniqueKey = Date.now();
             const urlMisa = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/misa.xlsx?nocache=${uniqueKey}`;
@@ -211,8 +218,8 @@
 
             try {
                 const [resMisa, resSv] = await Promise.all([
-                    fetch(urlMisa, { cache: 'reload' }).catch(() => null),
-                    fetch(urlSv, { cache: 'reload' }).catch(() => null)
+                    fetch(urlMisa, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } }).catch(() => null),
+                    fetch(urlSv, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } }).catch(() => null)
                 ]);
 
                 let loaded = 0;
@@ -231,10 +238,10 @@
                 if (loaded > 0) {
                     saveToLocalStorage();
                     updateStats();
-                    syncEl.innerHTML = `<span class="text-emerald-700 font-bold">Đã đồng bộ từ GitHub (${mapSv.size.toLocaleString()} mã SV, ${mapMisa.size.toLocaleString()} mã MISA)</span>`;
+                    syncEl.innerHTML = `<span class="text-emerald-700 font-bold"><i class="fa-solid fa-circle-check"></i> Đã cập nhật thành công file mới từ GitHub (${mapSv.size.toLocaleString()} mã SV, ${mapMisa.size.toLocaleString()} mã MISA)</span>`;
                     if(currentOrderRows.length > 0) recomputeAll();
                 } else {
-                    syncEl.innerHTML = `<span class="text-amber-700">Chưa có dữ liệu sẵn. Vui lòng bấm chọn file MISA/SV ở trên để nạp.</span>`;
+                    syncEl.innerHTML = `<span class="text-amber-700">Chưa tìm thấy file trên GitHub. Bạn có thể dùng nút "Chọn MISA / SV" phía trên để nạp nhanh.</span>`;
                 }
             } catch (err) {
                 syncEl.innerHTML = `<span class="text-red-700">Lỗi kết nối: ${err.message}</span>`;
