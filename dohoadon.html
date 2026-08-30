@@ -1,0 +1,2775 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>App So Sánh Giá Hóa Đơn & Quản Lý Kho MISA</title>
+  <!-- Thư viện đọc Excel & PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --success: #16a34a;
+      --danger: #dc2626;
+      --warning: #d97706;
+      --info: #0284c7;
+    }
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: var(--bg); margin: 0; padding: 16px; color: var(--text); }
+    .container { max-width: 1560px; margin: 0 auto; }
+    
+    .header-panel {
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      color: white; padding: 18px 22px; border-radius: 10px; margin-bottom: 16px;
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
+    }
+    .header-panel h1 { margin: 0; font-size: 19px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .header-panel p { margin: 3px 0 0 0; font-size: 12.5px; color: #94a3b8; }
+    
+    .grid-layout { display: grid; grid-template-columns: 370px 1fr; gap: 16px; }
+    @media (max-width: 1080px) { .grid-layout { grid-template-columns: 1fr; } }
+    @media (max-width: 640px) { .stats-summary { grid-template-columns: repeat(2, 1fr); } }
+    
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); margin-bottom: 16px; position: relative; }
+    .card-title { margin-top: 0; margin-bottom: 14px; font-size: 14.5px; font-weight: 700; display: flex; align-items: center; justify-content: space-between; }
+    
+    .db-status-box {
+      background: #f1f5f9; border-radius: 8px; padding: 11px 13px; font-size: 12.5px; margin-bottom: 14px; border-left: 4px solid var(--primary);
+    }
+    .db-status-box.active { border-left-color: var(--success); background: #f0fdf4; }
+    
+    .file-dropzone {
+      border: 2px dashed #cbd5e1; border-radius: 8px; padding: 20px 14px; text-align: center; cursor: pointer; transition: all 0.2s; background: #fafafa; display: block;
+    }
+    .file-dropzone:hover, .file-dropzone.dragover { border-color: var(--primary); background: #eff6ff; }
+    .file-dropzone input { display: none; }
+    
+    .form-group { margin-bottom: 12px; position: relative; }
+    .form-group label { display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 5px; color: #475569; }
+    input[type="text"], input[type="number"], input[type="password"] {
+      width: 100%; padding: 8px 11px; border: 1px solid var(--border); border-radius: 6px; font-size: 13.5px; outline: none; transition: 0.2s;
+    }
+    input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+    
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+      padding: 7px 13px; border-radius: 6px; font-weight: 600; font-size: 12.5px; cursor: pointer; border: none; transition: 0.15s;
+    }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-danger { background: #fee2e2; color: var(--danger); }
+    .btn-danger:hover { background: #fecaca; }
+    .btn-outline { border: 1px solid var(--border); background: white; color: var(--text); }
+    .btn-outline:hover { background: #f8fafc; }
+    .btn-clear { background: #fff1f2; color: #e11d48; border: 1px solid #fecdd3; }
+    .btn-clear:hover { background: #ffe4e6; }
+    
+    .stats-summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 14px; }
+    .stat-item { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 9px; text-align: center; cursor: pointer; transition: 0.15s; }
+    .stat-item:hover, .stat-item.active { border-color: var(--primary); transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .stat-item .num { font-size: 17px; font-weight: 700; }
+    .stat-item .lbl { font-size: 11.5px; color: var(--text-muted); }
+    
+    .active-file-bar {
+      background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 14px;
+      display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;
+    }
+    
+    .filter-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 10px; flex-wrap: wrap; }
+    .filter-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+    .filter-tab { padding: 4px 10px; font-size: 12px; border-radius: 20px; border: 1px solid var(--border); background: white; cursor: pointer; }
+    .filter-tab.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    th { background: #f8fafc; color: #475569; font-weight: 600; text-align: left; padding: 9px 10px; border-bottom: 2px solid var(--border); white-space: nowrap; }
+    td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    tr:hover td { background: #f8fafc; }
+    .text-right { text-align: right; }
+    
+    .code-badge { font-family: ui-monospace, Consolas, monospace; font-weight: 700; color: #1e40af; background: #dbeafe; padding: 2px 6px; border-radius: 4px; font-size: 11.5px; display: inline-block; }
+    .code-new { color: #b45309; font-weight: 700; background: #fef3c7; border: 1px solid #fde68a; padding: 2px 6px; border-radius: 4px; font-size: 11.5px; display: inline-block; }
+    
+    .badge { padding: 3px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; display: inline-block; white-space: nowrap; }
+    .badge-equal { background: #e0f2fe; color: #0369a1; }
+    .badge-up { background: #fee2e2; color: #b91c1c; }
+    .badge-down { background: #dcfce7; color: #15803d; }
+    .badge-unknown { background: #fef3c7; color: #92400e; }
+    
+    .inv-name { font-weight: 600; color: #0f172a; line-height: 1.4; }
+    .cat-match { font-size: 11.5px; color: #475569; margin-top: 3px; }
+    .desc-match { font-size: 11px; color: #0284c7; margin-top: 2px; }
+    .unmatched-warn { font-size: 11.5px; color: #b45309; font-weight: 600; margin-top: 2px; }
+    .hint-text { font-size: 11px; color: #64748b; margin-top: 4px; }
+    .btn-edit-match { padding: 2px 6px; font-size: 10.5px; margin-left: 6px; color: #475569; border: 1px dashed #cbd5e1; border-radius: 4px; background: white; cursor: pointer; }
+    .btn-edit-match:hover { background: #eff6ff; color: var(--primary); border-color: var(--primary); }
+
+    .kiot-dropdown {
+      position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #cbd5e1;
+      border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); z-index: 2000; max-height: 320px; overflow-y: auto; display: none; margin-top: 4px;
+    }
+    .kiot-header {
+      background: #f0fdf4; padding: 7px 12px; font-size: 11.5px; font-weight: 700; color: #166534;
+      display: grid; grid-template-columns: 120px 1fr 85px; border-bottom: 1px solid #dcfce7; position: sticky; top: 0; z-index: 10;
+    }
+    .kiot-row {
+      padding: 8px 12px; border-bottom: 1px solid #f1f5f9; cursor: pointer; display: grid; grid-template-columns: 120px 1fr 85px;
+      align-items: center; gap: 8px; font-size: 12px; transition: background 0.1s;
+    }
+    .kiot-row:hover { background: #f0f9ff; }
+    .kiot-code { font-family: ui-monospace, Consolas, monospace; font-weight: 700; color: #1e40af; font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .kiot-name { color: #1e293b; line-height: 1.35; }
+    .kiot-desc { font-size: 11px; color: #0284c7; margin-top: 1px; }
+    .kiot-meta { text-align: right; font-size: 11px; white-space: nowrap; }
+    .kiot-meta .price { color: #2563eb; font-weight: 700; }
+    .kiot-meta .stock { color: #64748b; }
+    .kiot-empty { padding: 14px; text-align: center; color: #94a3b8; font-size: 12px; }
+
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(15, 23, 42, 0.5); backdrop-filter: blur(2px);
+      display: none; align-items: center; justify-content: center; z-index: 9999;
+    }
+    .modal-box {
+      background: white; border-radius: 12px; max-width: 680px; width: 92%; padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); max-height: 85vh; display: flex; flex-direction: column;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="header-panel">
+    <div>
+      <h1>⚡ App So Sánh Giá Hóa Đơn & Quản Lý Kho MISA</h1>
+      <p>Hỗ trợ nạp trực tiếp file XML HĐĐT (TT78), Excel và PDF • Tự động bóc mã phụ tùng • Đối soát trực tiếp mã MISA</p>
+    </div>
+  </div>
+
+  <div class="grid-layout">
+    <!-- CỘT 1: Master Kho & Tra cứu -->
+    <div>
+      <div class="card">
+        <div class="card-title">
+          <span>📦 Dữ Liệu Kho MISA (Master)</span>
+          <button class="btn btn-danger" style="padding: 3px 8px; font-size: 11px;" onclick="clearMasterData()">Xóa Dữ Liệu</button>
+        </div>
+        
+        <div class="db-status-box" id="dbStatus">
+          ⏳ Đang kiểm tra dữ liệu kho lưu trong máy...
+        </div>
+
+        <label class="file-dropzone" id="dropzoneMaster" for="masterFileInput">
+          <div style="font-size: 24px; margin-bottom: 4px;">📂</div>
+          <div style="font-weight: 600; font-size: 13px; color: var(--primary);">Chọn / Nạp File Danh Mục MISA</div>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">File .xlsx, .xls (Tự nhận diện cột & lưu vĩnh viễn)</div>
+          <input type="file" id="masterFileInput" accept=".xlsx, .xls">
+        </label>
+
+        <div style="display: flex; align-items: center; gap: 8px; margin: 12px 0; color: #94a3b8; font-size: 11px;">
+          <div style="flex:1; height:1px; background:#e2e8f0;"></div>
+          <span>HOẶC</span>
+          <div style="flex:1; height:1px; background:#e2e8f0;"></div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 14px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:10px 12px;">
+          <label style="display:flex; align-items:center; gap:6px;">🐙 Nạp từ GitHub <span style="font-weight:400; color:#16a34a; font-size:10.5px;">(khuyến nghị — dùng cho cập nhật nhiều lần/ngày, nhiều máy)</span></label>
+          <input type="text" id="githubFileLinkInput" placeholder="Dán link file .xlsx/.csv trên GitHub (link xem file hoặc link Raw)" style="margin-bottom:6px;">
+          <input type="password" id="githubTokenInput" placeholder="Token cá nhân GitHub (chỉ cần nếu repo Private)">
+          <button class="btn btn-primary" id="btnLoadGithub" style="width: 100%; margin-top: 8px;" onclick="loadMasterFromGithub()">🐙 Nạp từ GitHub</button>
+          <div class="hint-text">💡 Đưa file danh mục MISA (.xlsx hoặc .csv) lên 1 repo GitHub, dán link file đó vào đây (link xem file bình thường trên GitHub hoặc link "Raw" đều được). Repo Private thì dán thêm Token cá nhân (GitHub &gt; Settings &gt; Developer settings &gt; Personal access tokens, chỉ cần quyền đọc repo). Nạp trực tiếp, không qua proxy.</div>
+        </div>
+
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>🔍 Dò Mã Nhanh / Thủ Công</span>
+          <button class="btn btn-outline" style="padding: 3px 7px; font-size: 11px;" onclick="clearManualSearch()">Làm mới</button>
+        </div>
+        
+        <div class="form-group">
+          <label>Mã phụ tùng, tên hàng:</label>
+          <div style="position: relative;">
+            <input type="text" id="manualQuery" placeholder="Ví dụ: 16SF41100000, 43110-16H20V000, Lọc nhớt..." autocomplete="off">
+            <div class="kiot-dropdown" id="kiotSuggestionsBox">
+              <div class="kiot-header">
+                <div>Mã hàng</div>
+                <div>Tên hàng</div>
+                <div style="text-align: right;">Giá cũ / Tồn</div>
+              </div>
+              <div id="kiotSuggestionsList"></div>
+            </div>
+          </div>
+          <div class="hint-text">💡 Gợi ý nhanh kiểu KiotViet khi gõ mã hoặc tên.</div>
+        </div>
+        
+        <div class="form-group" style="display: grid; grid-template-columns: 1fr 1.3fr; gap: 8px;">
+          <div>
+            <label>SL HĐ:</label>
+            <input type="number" id="manualQty" value="1" min="1">
+          </div>
+          <div>
+            <label>Đơn giá HĐ (VNĐ):</label>
+            <input type="number" id="manualPrice" placeholder="Ví dụ: 131400">
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-top: 12px;">
+          <button class="btn btn-primary" style="flex: 1;" onclick="doManualSearch()">🔎 Tra Cứu Kho</button>
+          <button class="btn btn-outline" style="flex: 1;" onclick="addManualToComparison()">➕ Thêm Vào Bảng</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CỘT 2: Hóa Đơn & Bảng Đối Soát -->
+    <div>
+      <div class="card">
+        <div class="card-title">
+          <span id="cardHeaderTitle">📄 Hóa Đơn / Báo Giá Cần So Sánh</span>
+          <button class="btn btn-clear" id="btnClearInvoice" onclick="clearCurrentInvoice()" style="display: none;">
+            🗑️ Xóa Hóa Đơn Này (Đổi File Khác)
+          </button>
+        </div>
+
+        <div id="invoiceUploadContainer">
+          <label class="file-dropzone" id="dropzoneInvoice" for="invoiceFileInput" style="padding: 26px 16px; background: #fcfcfc; border-color: #93c5fd;">
+            <div style="font-size: 32px; margin-bottom: 6px;">📥</div>
+            <div style="font-weight: 700; font-size: 14.5px; color: #1e40af;">Bấm Vào Hoặc Kéo Thả File Hóa Đơn (XML / Excel / PDF)</div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Đọc chuẩn 100% XML Hóa đơn điện tử (TT78/NĐ123), Excel và PDF mọi nhà cung cấp • Có thể chọn/kéo thả NHIỀU file PDF cùng lúc để gộp chung 1 bảng đối soát</div>
+            <input type="file" id="invoiceFileInput" accept=".xml, .xlsx, .xls, .pdf" multiple>
+          </label>
+        </div>
+
+        <div id="activeFileBar" class="active-file-bar" style="display: none;">
+          <div style="font-size: 13px; color: #1e3a8a;">
+            📄 Đang mở: <b id="activeFileName">-</b> <span id="activeFileMeta" style="color: #64748b; font-size: 12px;"></span>
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <button class="btn btn-outline" style="font-size: 11.5px; padding: 4px 8px;" onclick="document.getElementById('invoiceFileInput').click()">🔄 Chọn File Khác</button>
+            <button class="btn btn-clear" style="font-size: 11.5px; padding: 4px 8px;" onclick="clearCurrentInvoice()">🗑️ Xóa</button>
+          </div>
+        </div>
+
+        <!-- Thống Kê Nhanh & Lọc -->
+        <div id="summaryBar" style="display: none; margin-top: 10px;">
+          <div class="stats-summary">
+            <div class="stat-item active" onclick="setFilter('all')">
+              <div class="num" id="statTotalItems">0</div>
+              <div class="lbl">Tất cả mặt hàng</div>
+            </div>
+            <div class="stat-item" style="border-color: #bbf7d0;" onclick="setFilter('equal')">
+              <div class="num" style="color: var(--success);" id="statEqual">0</div>
+              <div class="lbl">Bằng giá cũ</div>
+            </div>
+            <div class="stat-item" style="border-color: #fecaca;" onclick="setFilter('up')">
+              <div class="num" style="color: var(--danger);" id="statUp">0</div>
+              <div class="lbl">Tăng giá</div>
+            </div>
+            <div class="stat-item" style="border-color: #bbf7d0;" onclick="setFilter('down')">
+              <div class="num" style="color: #16a34a;" id="statDown">0</div>
+              <div class="lbl">Giảm giá</div>
+            </div>
+            <div class="stat-item" style="border-color: #fed7aa;" onclick="setFilter('unknown')">
+              <div class="num" style="color: var(--warning);" id="statUnknown">0</div>
+              <div class="lbl">Mã mới (Chưa có trong kho)</div>
+            </div>
+          </div>
+          
+          <div class="filter-bar">
+            <div class="filter-tabs">
+              <span class="filter-tab active" data-filter="all" onclick="setFilter('all')">Tất cả</span>
+              <span class="filter-tab" data-filter="up" onclick="setFilter('up')">Tăng giá 🔴</span>
+              <span class="filter-tab" data-filter="down" onclick="setFilter('down')">Giảm giá 🟢</span>
+              <span class="filter-tab" data-filter="equal" onclick="setFilter('equal')">Bằng giá 🔵</span>
+              <span class="filter-tab" data-filter="unknown" onclick="setFilter('unknown')">Mã mới (Cần tạo MISA) 🟡</span>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input type="text" id="tableSearchInput" placeholder="Lọc nhanh kết quả..." style="width: 190px; padding: 5px 9px; font-size: 12px;" oninput="applyTableFilter()">
+              <button class="btn btn-outline" style="white-space: nowrap;" onclick="exportComparisonExcel()">📥 Xuất Excel</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="overflow-x: auto; margin-top: 8px; border: 1px solid var(--border); border-radius: 8px; max-height: 650px; overflow-y: auto;">
+          <table id="mainTable">
+            <thead>
+              <tr>
+                <th style="width: 35px;">STT</th>
+                <th>Mã Hàng (MISA)</th>
+                <th>Tên Hàng Hóa (HĐ / Kho)</th>
+                <th>ĐVT</th>
+                <th class="text-right">Tồn MISA</th>
+                <th class="text-right">Giá Gần Nhất</th>
+                <th class="text-right">VAT MISA</th>
+                <th class="text-right">SL HĐ</th>
+                <th class="text-right">Đơn Giá HĐ</th>
+                <th class="text-right">VAT HĐ</th>
+                <th class="text-right">Biến Động Giá</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody">
+              <tr><td colspan="11" style="text-align: center; color: #94a3b8; padding: 36px;">Vui lòng nạp file danh mục MISA và tải lên hóa đơn để đối soát.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Đổi Mã -->
+<div class="modal-overlay" id="matchModal">
+  <div class="modal-box">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+      <h3 style="margin: 0; font-size: 15px;">Chọn Lại Mã Khớp Từ Danh Mục Kho</h3>
+      <button onclick="closeMatchModal()" style="border: none; background: none; font-size: 18px; cursor: pointer;">✕</button>
+    </div>
+    <div style="font-size: 12.5px; color: var(--text-muted); margin-bottom: 8px;">Hàng trên HĐ: <b id="modalInvName" style="color: var(--text);">-</b></div>
+    <input type="text" id="modalSearchCatalog" placeholder="Gõ mã hoặc tên phụ tùng để tìm..." style="margin-bottom: 10px;" oninput="searchCatalogInModal()">
+    <div id="modalSearchResults" style="overflow-y: auto; flex: 1; max-height: 360px; border: 1px solid var(--border); border-radius: 6px; padding: 4px;"></div>
+  </div>
+</div>
+
+<script>
+  if (window.pdfjsLib) {
+    try {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    } catch (e) {
+      console.warn('PDF.js worker initialization skipped:', e);
+    }
+  }
+
+  let masterCatalog = [];
+  let currentComparison = [];
+  let currentInvoiceItems = [];
+  let currentInvoiceName = '';
+  let currentInvoiceSupplierBrand = ''; // NCC/hãng dò được từ hóa đơn đang nạp (VD: honda, suzuki, sym, yamaha, ngk...)
+  let knownWarehouseTags = []; // Danh sách các giá trị "Kho ngầm định" (NCC) khác nhau, khác rỗng, đã thấy trong danh mục MISA
+  let currentInvoiceWarehouseTag = ''; // Tag "Kho ngầm định" khớp với tên NCC trên hóa đơn đang nạp (VD: "MAI THAO")
+  let currentFilter = 'all';
+  let activeEditingIndex = null;
+  let isManualSearchMode = false;
+
+  const fmt = (n) => (n || n === 0) ? Math.round(n).toLocaleString('vi-VN') + ' đ' : '-';
+
+  // Chuẩn hóa giá trị thuế suất VAT về dạng hiển thị "8%", nhận nhiều kiểu ghi khác nhau:
+  // số thuần (8, 0.08), chuỗi có ký hiệu % ("8%", "VAT 8%"), hoặc rỗng/không xác định.
+  function normalizeVatValue(raw) {
+    if (raw === null || raw === undefined || raw === '') return '';
+    let s = String(raw).trim();
+    if (!s) return '';
+    if (/không\s*chịu\s*thuế|kct|kckt/i.test(s)) return 'KCT';
+    let m = s.match(/(\d+(?:[.,]\d+)?)\s*%/);
+    if (m) {
+      let n = parseFloat(m[1].replace(',', '.'));
+      return isFinite(n) ? (Math.round(n * 100) / 100) + '%' : s;
+    }
+    let n = parseFloat(s.replace(',', '.'));
+    if (isFinite(n)) {
+      if (n > 0 && n < 1) n = n * 100; // dạng thập phân 0.08 -> 8
+      return (Math.round(n * 100) / 100) + '%';
+    }
+    return s;
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function cleanCode(s) {
+    return String(s || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  }
+
+  function removeVietnameseTones(str) {
+    if (!str) return '';
+    str = String(str).toLowerCase();
+    str = str.replace(/à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ/g, "a");
+    str = str.replace(/è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ/g, "e");
+    str = str.replace(/ì|í|ị|ỉ|ĩ/g, "i");
+    str = str.replace(/ò|ó|ọ|ỏ|õ|ô|ồ|ố|ộ|ổ|ỗ|ơ|ờ|ớ|ợ|ở|ỡ/g, "o");
+    str = str.replace(/ù|ú|ụ|ủ|ũ|ư|ừ|ứ|ự|ử|ữ/g, "u");
+    str = str.replace(/ỳ|ý|ỵ|ỷ|ỹ/g, "y");
+    str = str.replace(/đ/g, "d");
+    return str;
+  }
+
+  function normalizeText(s) {
+    if (!s) return '';
+    let str = String(s).toLowerCase();
+    str = str.replace(/kiếng/g, 'kính').replace(/khoá/g, 'khóa').replace(/dearm/g, 'dream').replace(/sirus/g, 'sirius').replace(/cụm/g, 'bộ');
+    str = str.replace(/[\-_/()\[\],.]+/g, ' ');
+    return str.split(/\s+/).filter(Boolean).join(' ');
+  }
+
+  // --- NHẬN DIỆN NHÀ CUNG CẤP / HÃNG (NCC) ĐỂ TRÁNH KHỚP NHẦM TÊN GIỮA CÁC HÃNG ---
+  // Danh sách hãng xe / hãng phụ tùng phổ biến. Có thể bổ sung thêm khi gặp NCC mới.
+  const KNOWN_BRANDS = [
+    'honda', 'yamaha', 'suzuki', 'sym', 'piaggio', 'vespa', 'kymco', 'kawasaki',
+    'ktm', 'ducati', 'daelim', 'peugeot', 'brixton', 'vinfast',
+    'ngk', 'denso', 'bosch', 'nok', 'koyo', 'nsk', 'ntn', 'fcc', 'exedy',
+    'did', 'rk', 'kmc', 'yuasa', 'gs', 'castrol', 'motul', 'caltex', 'havoline'
+  ];
+
+  // Bỏ dấu tiếng Việt để so khớp hãng không phụ thuộc dấu câu (dùng lại hàm removeVietnameseTones bên dưới)
+  function detectBrandKeyword(text) {
+    if (!text) return '';
+    const plain = ' ' + removeVietnameseTones(String(text)) + ' ';
+    for (let b of KNOWN_BRANDS) {
+      const re = new RegExp('(^|[^a-z0-9])' + b + '([^a-z0-9]|$)', 'i');
+      if (re.test(plain)) return b;
+    }
+    return '';
+  }
+
+  // --- 1. INDEXED DB TỰ ĐỘNG KHÔI PHỤC DỮ LIỆU TỪ MỌI PHIÊN BẢN CŨ ---
+  const PRIMARY_DB_NAME = 'KhoHangHoaDB_MISA_MASTER';
+  const STORE_NAME = 'MasterCatalogMisa';
+  const LEGACY_DBS = [
+    'KhoHangHoaDB_MISA_MASTER',
+    'KhoHangHoaDB_MISA_V16',
+    'KhoHangHoaDB_MISA_V15',
+    'KhoHangHoaDB_MISA_V14',
+    'KhoHangHoaDB_MISA_V12',
+    'KhoHangHoaDB_MISA_V4'
+  ];
+
+  function openSpecificDB(dbName) {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(dbName, 1);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function saveToDB(filename, items) {
+    const db = await openSpecificDB(PRIMARY_DB_NAME);
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const data = { id: 'current_catalog_misa', filename, updatedAt: new Date().toLocaleString('vi-VN'), items };
+      const req = store.put(data);
+      req.onsuccess = () => resolve(data);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function loadFromDB() {
+    for (let dbName of LEGACY_DBS) {
+      try {
+        const db = await openSpecificDB(dbName);
+        const data = await new Promise((resolve) => {
+          const tx = db.transaction(STORE_NAME, 'readonly');
+          const req = tx.objectStore(STORE_NAME).get('current_catalog_misa');
+          req.onsuccess = () => resolve(req.result || null);
+          req.onerror = () => resolve(null);
+        });
+        if (data && data.items && data.items.length > 0) {
+          if (dbName !== PRIMARY_DB_NAME) {
+            await saveToDB(data.filename, data.items);
+          }
+          return data;
+        }
+      } catch (e) {
+        console.warn('DB check skipped for:', dbName);
+      }
+    }
+    return null;
+  }
+
+  async function clearMasterData() {
+    if (!confirm('Bạn có chắc muốn xóa dữ liệu danh mục kho MISA đã lưu?')) return;
+    for (let dbName of LEGACY_DBS) {
+      try {
+        const db = await openSpecificDB(dbName);
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).clear();
+      } catch (e) {}
+    }
+    masterCatalog = [];
+    updateDBStatus(null);
+    if (currentInvoiceItems.length > 0) {
+      processComparison(currentInvoiceItems);
+    }
+  }
+
+  function updateDBStatus(data) {
+    const box = document.getElementById('dbStatus');
+    if (data && data.items && data.items.length > 0) {
+      box.className = 'db-status-box active';
+      box.innerHTML = `🟢 <b>Đã sẵn sàng</b> • <b>${data.items.length.toLocaleString()}</b> mặt hàng<br>📁 File: <i>${escapeHtml(data.filename)}</i> (${data.updatedAt})`;
+      masterCatalog = data.items;
+    } else {
+      box.className = 'db-status-box';
+      box.innerHTML = `⚠️ <b>Chưa có dữ liệu kho MISA</b><br>Vui lòng nạp file Excel danh mục kho để bắt đầu.`;
+      masterCatalog = [];
+    }
+    rebuildKnownWarehouseTags(masterCatalog);
+  }
+
+  // Link file danh mục MISA MẶC ĐỊNH trên GitHub - dùng khi trình duyệt CHƯA từng lưu link
+  // nào trước đó (VD: đồng nghiệp mở link chia sẻ lần đầu trên máy/trình duyệt mới), để họ
+  // vẫn tự động có ngay dữ liệu tồn kho mà không cần tự dán link thủ công. Đổi giá trị này
+  // nếu sau này chuyển file/repo khác; để chuỗi rỗng '' nếu không muốn có mặc định.
+  const DEFAULT_GITHUB_MASTER_LINK = 'https://github.com/tythanhphat178-ops/dodondathangtrongmisa/blob/main/misa.xlsx';
+
+  window.addEventListener('DOMContentLoaded', async () => {
+    try {
+      const saved = await loadFromDB();
+      updateDBStatus(saved);
+    } catch (e) {
+      console.error(e);
+      updateDBStatus(null);
+    }
+    setupDragDrop();
+    setupKiotSuggestions();
+
+    // Tự động điền lại link/token GitHub đã dùng lần trước (nếu có), để không phải dán lại mỗi
+    // lần mở app. Nếu trình duyệt CHƯA từng lưu link nào (lần đầu mở trên máy này), dùng tạm
+    // link mặc định (DEFAULT_GITHUB_MASTER_LINK) để điền sẵn vào ô, đồng thời làm "link hiệu
+    // lực" cho bước tự động kiểm tra cập nhật bên dưới - người dùng vẫn có thể sửa/xóa nếu muốn
+    // trỏ sang file khác.
+    let effectiveLink = '', effectiveToken = '';
+    try {
+      const savedLink = localStorage.getItem('misa_github_link');
+      const savedToken = localStorage.getItem('misa_github_token');
+      const linkInput = document.getElementById('githubFileLinkInput');
+      const tokenInput = document.getElementById('githubTokenInput');
+      effectiveLink = savedLink || DEFAULT_GITHUB_MASTER_LINK;
+      effectiveToken = savedToken || '';
+      if (linkInput && !linkInput.value) linkInput.value = effectiveLink;
+      if (savedToken && tokenInput) tokenInput.value = savedToken;
+    } catch (e) {
+      effectiveLink = DEFAULT_GITHUB_MASTER_LINK;
+    }
+
+    // [MỚI] Tự động kiểm tra + nạp bản cập nhật mới nhất của kho MISA từ GitHub ngay khi mở
+    // app - chạy ngầm, không chặn giao diện (không dùng "await" ở đây để trang vẫn hiển thị
+    // ngay, việc kiểm tra/cập nhật chạy song song phía sau).
+    if (effectiveLink) {
+      autoCheckGithubMasterUpdate(effectiveLink, effectiveToken);
+    }
+  });
+
+  // --- 2. XỬ LÝ KÉO THẢ & NẠP MASTER EXCEL ---
+  function setupDragDrop() {
+    ['dropzoneMaster', 'dropzoneInvoice'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      ['dragenter', 'dragover'].forEach(evt => {
+        el.addEventListener(evt, (e) => { e.preventDefault(); el.classList.add('dragover'); });
+      });
+      ['dragleave', 'drop'].forEach(evt => {
+        el.addEventListener(evt, (e) => { e.preventDefault(); el.classList.remove('dragover'); });
+      });
+      el.addEventListener('drop', (e) => {
+        const files = Array.from(e.dataTransfer.files || []);
+        if (files.length === 0) return;
+        if (id === 'dropzoneMaster') processMasterFile(files[0]);
+        else handleInvoiceFiles(files);
+      });
+    });
+  }
+
+  document.getElementById('masterFileInput').addEventListener('change', function(e) {
+    if (e.target.files[0]) processMasterFile(e.target.files[0]);
+    this.value = '';
+  });
+
+  function processMasterFile(file) {
+    const reader = new FileReader();
+    reader.onload = async function(evt) {
+      const data = new Uint8Array(evt.target.result);
+      await parseAndSaveMasterWorkbook(data, file.name);
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  // Trích danh sách items từ 1 workbook SheetJS đã đọc (dùng chung cho mọi nguồn dữ liệu).
+  function extractMasterItemsFromWorkbook(wb) {
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+    let headerIdx = rawRows.findIndex(r => r && r.some(c => /mã|mã hàng/i.test(String(c))) && r.some(c => /tên|tên hàng/i.test(String(c))));
+    if (headerIdx === -1) headerIdx = 0;
+
+    const headers = (rawRows[headerIdx] || []).map(h => String(h || '').trim());
+    const codeIdx = headers.findIndex(h => /^mã/i.test(h));
+    const nameIdx = headers.findIndex(h => /^tên/i.test(h));
+    const descIdx = headers.findIndex(h => /diễn giải|mô tả/i.test(h));
+    const unitIdx = headers.findIndex(h => /đơn vị|dvt/i.test(h));
+    const stockIdx = headers.findIndex(h => /số lượng tồn|tồn kho|tồn/i.test(h));
+    const buyIdx = headers.findIndex(h => /giá mua gần nhất|đơn giá mua|giá mua/i.test(h));
+    // Cột "Kho ngầm định" trong danh mục MISA thực chất chính là tên Nhà cung cấp (NCC) của mặt
+    // hàng đó (VD: "MAI THAO", "SUZUKI NGỌC YẾN", "HEAD 3"...). Đọc cột này để sau đó ưu tiên
+    // khớp đúng mặt hàng của đúng NCC ghi trên hóa đơn, tránh khớp nhầm sang NCC khác.
+    const warehouseIdx = headers.findIndex(h => /kho\s*ng[ầâ]m\s*đ[ịi]nh|kho ngam dinh/i.test(h));
+    // Chỉ nhận cột thực sự là "Thuế suất" (VD: "Thuế suất GTGT") hoặc chữ "VAT" đứng riêng.
+    // KHÔNG dùng nhánh chỉ chứa "thuế" đơn lẻ, vì sẽ nhận nhầm các cột như
+    // "Thành tiền trước thuế", "Tiền thuế GTGT"... làm sai lệch dữ liệu.
+    const vatIdx = headers.findIndex(h => /thu[êeế]\s*su[âaấ]t|\bvat\b/i.test(h));
+
+    return rawRows.slice(headerIdx + 1).filter(r => r && (r[codeIdx] || r[nameIdx])).map(r => ({
+      code: String(r[codeIdx] || '').trim(),
+      name: String(r[nameIdx] || '').trim(),
+      desc: descIdx !== -1 ? String(r[descIdx] || '').trim() : '',
+      unit: unitIdx !== -1 ? String(r[unitIdx] || '').trim() : '',
+      stock: Number(r[stockIdx]) || 0,
+      buyPrice: Number(r[buyIdx]) || 0,
+      warehouse: warehouseIdx !== -1 ? String(r[warehouseIdx] || '').trim() : '',
+      vat: vatIdx !== -1 ? normalizeVatValue(r[vatIdx]) : ''
+    }));
+  }
+
+  // Hàm dùng chung: nhận dữ liệu nhị phân (Uint8Array/ArrayBuffer) của file Excel MISA
+  // + tên file hiển thị, rồi bóc tách cột, lưu vào IndexedDB và cập nhật giao diện.
+  // Dùng chung cho nạp file từ máy (processMasterFile).
+  // Xây lại danh sách các "Kho ngầm định" (= tên NCC) khác nhau đang có trong danh mục MISA,
+  // để dùng dò xem tên NCC trên hóa đơn có khớp NCC nào trong kho hay không.
+  function rebuildKnownWarehouseTags(items) {
+    let set = new Set();
+    for (let it of items) {
+      let w = (it.warehouse || '').trim();
+      if (w) set.add(w);
+    }
+    knownWarehouseTags = Array.from(set);
+  }
+
+  async function parseAndSaveMasterWorkbook(binaryData, filename, opts) {
+    opts = opts || {};
+    try {
+      const wb = XLSX.read(binaryData, { type: 'array' });
+      const items = extractMasterItemsFromWorkbook(wb);
+      rebuildKnownWarehouseTags(items);
+
+      const saved = await saveToDB(filename, items);
+      updateDBStatus(saved);
+      if (!opts.silent) alert(`Đã nạp thành công ${items.length.toLocaleString()} mặt hàng từ file MISA!`);
+
+      if (currentInvoiceItems.length > 0) {
+        processComparison(currentInvoiceItems);
+      }
+      return true;
+    } catch (err) {
+      if (!opts.silent) alert('Lỗi khi nạp file Master Excel: ' + err.message);
+      else console.warn('[Tự động cập nhật MISA] Lỗi khi đọc file Excel:', err.message);
+      return false;
+    }
+  }
+
+  // Nạp danh mục MISA từ nội dung CSV (dùng cho link GitHub trỏ tới file .csv).
+  // opts.silent = true: dùng cho lượt TỰ ĐỘNG kiểm tra/cập nhật khi mở app - không hiện popup
+  // alert (chỉ cập nhật dòng trạng thái phía trên) để không làm phiền người dùng mỗi lần mở app.
+  async function parseAndSaveMasterFromCsv(csvText, filename, opts) {
+    opts = opts || {};
+    try {
+      const wb = XLSX.read(csvText, { type: 'string' });
+      const items = extractMasterItemsFromWorkbook(wb);
+      rebuildKnownWarehouseTags(items);
+
+      const saved = await saveToDB(filename, items);
+      updateDBStatus(saved);
+      if (!opts.silent) alert(`Đã nạp thành công ${items.length.toLocaleString()} mặt hàng từ GitHub!`);
+
+      if (currentInvoiceItems.length > 0) {
+        processComparison(currentInvoiceItems);
+      }
+      return true;
+    } catch (err) {
+      if (!opts.silent) alert('Lỗi khi nạp dữ liệu từ GitHub: ' + err.message);
+      else console.warn('[Tự động cập nhật MISA] Lỗi khi đọc file CSV:', err.message);
+      return false;
+    }
+  }
+
+  // Dò xem trong đoạn text (thường là phần đầu hóa đơn: tên công ty bán hàng) có chứa tên NCC
+  // nào trùng với 1 trong các "Kho ngầm định" đã biết trong danh mục MISA hay không (so sánh
+  // không phân biệt hoa/thường, không dấu, để chấp nhận sai khác nhỏ về chính tả/khoảng trắng).
+  // Ưu tiên tag DÀI NHẤT khớp được, để tránh khớp nhầm 1 từ ngắn chung chung.
+  function detectKnownWarehouseTag(text) {
+    if (!text || knownWarehouseTags.length === 0) return '';
+    const plain = removeVietnameseTones(String(text)).toLowerCase();
+    let best = '';
+    for (let tag of knownWarehouseTags) {
+      if (tag.length < 4) continue; // bỏ qua tag quá ngắn, dễ khớp nhầm ngẫu nhiên
+      const tagPlain = removeVietnameseTones(tag).toLowerCase();
+      if (plain.includes(tagPlain) && tag.length > best.length) {
+        best = tag;
+      }
+    }
+    return best;
+  }
+
+
+
+  // Tải nội dung THÔ của 1 file trên GitHub (dùng chung cho cả nạp thủ công lẫn tự động kiểm
+  // tra cập nhật). Trả về { isCsv, text, buffer } - chỉ 1 trong 2 "text"/"buffer" có giá trị
+  // tùy phần mở rộng file. Repo Private cần "token"; Repo Public để trống token vẫn đọc được
+  // thẳng qua raw.githubusercontent.com (CORS mở, không qua proxy).
+  async function fetchGithubFileContent(info, token) {
+    const pathEncoded = info.path.split('/').map(encodeURIComponent).join('/');
+    const isCsv = /\.csv$/i.test(info.path);
+    let text = null, buffer = null;
+
+    if (token) {
+      const apiUrl = `https://api.github.com/repos/${encodeURIComponent(info.owner)}/${encodeURIComponent(info.repo)}/contents/${pathEncoded}?ref=${encodeURIComponent(info.branch)}`;
+      const res = await fetch(apiUrl, {
+        headers: { 'Accept': 'application/vnd.github.raw', 'Authorization': 'token ' + token },
+        cache: 'no-store'
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status + ' — kiểm tra lại link, nhánh/đường dẫn file, và Token có đủ quyền đọc repo chưa.');
+      if (isCsv) text = await res.text(); else buffer = await res.arrayBuffer();
+    } else {
+      const rawGhUrl = `https://raw.githubusercontent.com/${encodeURIComponent(info.owner)}/${encodeURIComponent(info.repo)}/${encodeURIComponent(info.branch)}/${pathEncoded}`;
+      const res = await fetch(rawGhUrl, { mode: 'cors', cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status + ' — nếu repo là Private, dán thêm Token cá nhân bên dưới link.');
+      if (isCsv) text = await res.text(); else buffer = await res.arrayBuffer();
+    }
+
+    if (isCsv) {
+      if (!text || text.trim().length === 0) throw new Error('Dữ liệu trả về rỗng.');
+      if (text.trim().startsWith('<')) throw new Error('Link trả về trang HTML thay vì nội dung file — kiểm tra lại đường dẫn file trên GitHub.');
+    }
+    return { isCsv, text, buffer };
+  }
+
+  // Lưu nội dung đã tải (từ fetchGithubFileContent) vào IndexedDB. Dùng chung cho nạp thủ
+  // công (silent=false, có popup xác nhận) lẫn tự động kiểm tra khi mở app (silent=true).
+  async function applyGithubFileContent(content, opts) {
+    if (content.isCsv) {
+      return await parseAndSaveMasterFromCsv(content.text, 'Danh_muc_MISA_GitHub.csv', opts);
+    }
+    return await parseAndSaveMasterWorkbook(new Uint8Array(content.buffer), 'Danh_muc_MISA_GitHub.xlsx', opts);
+  }
+
+  // Lấy SHA của commit MỚI NHẤT tác động tới đúng file này trên GitHub (không phải SHA của
+  // cả repo) - dùng để so sánh xem file đã đổi so với lần nạp trước hay chưa, TRƯỚC KHI tải
+  // toàn bộ nội dung file (tiết kiệm băng thông + số lượt gọi API GitHub mỗi lần mở app).
+  async function getLatestCommitSha(info, token) {
+    const pathEncoded = info.path.split('/').map(encodeURIComponent).join('/');
+    const url = `https://api.github.com/repos/${encodeURIComponent(info.owner)}/${encodeURIComponent(info.repo)}/commits?path=${pathEncoded}&sha=${encodeURIComponent(info.branch)}&per_page=1`;
+    const headers = token ? { 'Authorization': 'token ' + token } : {};
+    const res = await fetch(url, { headers, cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const commits = await res.json();
+    return (commits && commits[0] && commits[0].sha) ? commits[0].sha : null;
+  }
+
+  // [MỚI] Tự động kiểm tra + nạp bản CẬP NHẬT MỚI của danh mục MISA từ GitHub mỗi khi mở app,
+  // chạy NGẦM (không hiện popup) ngay sau khi trang tải xong. Cơ chế "kéo" (pull) chứ không
+  // phải "đẩy" (push) thời gian thực: mỗi lần mở app, app tự hỏi GitHub "commit mới nhất tác
+  // động tới file misa.xlsx là commit nào" rồi so với lần nạp gần nhất đã lưu -
+  //   - Nếu TRÙNG (chưa có ai cập nhật file trên GitHub) -> bỏ qua, KHÔNG tải lại nội dung file,
+  //     giữ nguyên dữ liệu tồn kho đang có trong máy.
+  //   - Nếu KHÁC (đã có commit mới, VD vừa upload lại misa.xlsx với tồn kho mới) -> tự tải về
+  //     toàn bộ nội dung mới nhất và ghi đè dữ liệu cũ, không cần người dùng bấm nút.
+  // Lỗi mạng/offline/hết lượt gọi API GitHub (giới hạn 60 lượt/giờ nếu không có Token) đều
+  // được nuốt lặng lẽ (console.warn), giữ nguyên dữ liệu cache cũ trong IndexedDB, KHÔNG làm
+  // gián đoạn hay báo lỗi phiền người dùng - vì đây là bước kiểm tra nền, không phải thao tác
+  // người dùng chủ động yêu cầu.
+  async function autoCheckGithubMasterUpdate(effectiveLink, token) {
+    const info = parseGithubFileUrl(effectiveLink);
+    if (!info) return;
+
+    const box = document.getElementById('dbStatus');
+    let latestSha = null;
+    try {
+      latestSha = await getLatestCommitSha(info, token);
+    } catch (e) {
+      console.warn('[Tự động cập nhật MISA] Không kiểm tra được commit mới nhất trên GitHub:', e.message);
+      return;
+    }
+    if (!latestSha) return;
+
+    let lastKnownSha = null;
+    try { lastKnownSha = localStorage.getItem('misa_github_last_sha'); } catch (e) {}
+
+    // Kho MISA trên GitHub CHƯA có commit mới kể từ lần nạp gần nhất -> không cần tải lại.
+    if (lastKnownSha === latestSha && masterCatalog.length > 0) return;
+
+    const originalHtml = box ? box.innerHTML : '';
+    const originalClass = box ? box.className : '';
+    if (box) {
+      box.className = 'db-status-box';
+      box.innerHTML = `🔄 Đang tự động kiểm tra bản cập nhật kho MISA mới nhất từ GitHub...`;
+    }
+
+    try {
+      const content = await fetchGithubFileContent(info, token);
+      const ok = await applyGithubFileContent(content, { silent: true });
+      if (ok) {
+        try { localStorage.setItem('misa_github_last_sha', latestSha); } catch (e) {}
+      } else if (box) {
+        box.className = originalClass;
+        box.innerHTML = originalHtml;
+      }
+    } catch (e) {
+      console.warn('[Tự động cập nhật MISA] Lỗi khi tự tải bản mới từ GitHub, giữ nguyên dữ liệu cũ:', e.message);
+      if (box) { box.className = originalClass; box.innerHTML = originalHtml; }
+    }
+  }
+
+  // Bóc tách link file GitHub (dạng xem file bình thường "blob", dạng "raw" ngay trên
+  // github.com, hoặc dạng đã là raw.githubusercontent.com) thành {owner, repo, branch, path}
+  // để từ đó tự dựng lại URL raw chuẩn (không cần người dùng tự đi tìm link Raw thủ công).
+  // Hỗ trợ các dạng phổ biến:
+  //   https://github.com/{owner}/{repo}/blob/{branch}/{đường/dẫn}/file.xlsx
+  //   https://github.com/{owner}/{repo}/raw/{branch}/{đường/dẫn}/file.xlsx
+  //   https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{đường/dẫn}/file.xlsx
+  function parseGithubFileUrl(rawUrl) {
+    let s = String(rawUrl || '').trim();
+    if (!s) return null;
+    try {
+      const u = new URL(s);
+      const parts = u.pathname.replace(/^\/+/, '').split('/').filter(Boolean);
+
+      if (u.hostname === 'raw.githubusercontent.com') {
+        if (parts.length < 4) return null;
+        return { owner: parts[0], repo: parts[1], branch: parts[2], path: parts.slice(3).join('/') };
+      }
+
+      if (u.hostname === 'github.com' || u.hostname === 'www.github.com') {
+        if (parts.length < 5) return null;
+        const kind = parts[2]; // 'blob' hoặc 'raw'
+        if (kind !== 'blob' && kind !== 'raw') return null;
+        return { owner: parts[0], repo: parts[1], branch: parts[3], path: parts.slice(4).join('/') };
+      }
+
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Nạp danh mục MISA trực tiếp từ 1 file .xlsx/.xls/.csv lưu trên GitHub.
+  // - Repo Public: đọc thẳng qua raw.githubusercontent.com (CORS mở, không cần proxy).
+  // - Repo Private: cần dán kèm Token cá nhân (PAT), đọc qua GitHub API (Accept: raw) vì
+  //   raw.githubusercontent.com không xác thực được Token cho repo private từ trình duyệt.
+  async function loadMasterFromGithub() {
+    const linkInput = document.getElementById('githubFileLinkInput');
+    const tokenInput = document.getElementById('githubTokenInput');
+    const btn = document.getElementById('btnLoadGithub');
+    const rawUrl = linkInput ? linkInput.value.trim() : '';
+    const token = tokenInput ? tokenInput.value.trim() : '';
+    if (!rawUrl) {
+      alert('Vui lòng dán link file danh mục MISA (.xlsx, .xls hoặc .csv) trên GitHub.');
+      return;
+    }
+
+    const originalLabel = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Đang tải...'; }
+
+    try {
+      const info = parseGithubFileUrl(rawUrl);
+      if (!info) throw new Error('Không nhận diện được link GitHub. Dùng link xem file (dạng .../blob/...) hoặc link Raw (raw.githubusercontent.com/...).');
+
+      const content = await fetchGithubFileContent(info, token);
+      await applyGithubFileContent(content, { silent: false });
+
+      // Lưu lại link/token vào máy để lần sau mở app tự động điền sẵn VÀ tự động kiểm tra
+      // cập nhật, không cần dán lại/bấm nút mỗi lần.
+      try {
+        localStorage.setItem('misa_github_link', rawUrl);
+        if (token) localStorage.setItem('misa_github_token', token);
+        // Đồng bộ luôn SHA hiện tại, để lượt tự động kiểm tra kế tiếp (khi mở lại app) biết
+        // đây là bản đã có, tránh tải lại ngay lập tức 1 nội dung vừa nạp xong.
+        const latestSha = await getLatestCommitSha(info, token).catch(() => null);
+        if (latestSha) localStorage.setItem('misa_github_last_sha', latestSha);
+      } catch (e) {}
+    } catch (err) {
+      alert(
+        'Không nạp được dữ liệu từ GitHub.\n\n' +
+        'Kiểm tra lại: (1) Link đúng định dạng file GitHub (blob hoặc raw), ' +
+        '(2) Repo Private thì đã dán Token cá nhân đủ quyền đọc repo chưa, ' +
+        '(3) Nhánh/đường dẫn file còn tồn tại không.\n\n' +
+        'Chi tiết lỗi: ' + err.message
+      );
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = originalLabel; }
+    }
+  }
+
+  // --- 3. BÓC TÁCH MÃ PHỤ TÙNG CHUẨN XÁC MỌI ĐỊNH DẠNG ---
+  function splitPartCodeAndName(rawStr) {
+    let s = String(rawStr || '').trim();
+
+    let tokens = s.split(/\s+/);
+    let first = tokens[0] || '';
+    let hyphenCountFirst = (first.match(/-/g) || []).length;
+
+    // 1. SYM: Mã nhiều đoạn nối bằng gạch ngang, đứng riêng tách khỏi tên bằng khoảng trắng,
+    //    ví dụ: "13102-VA2-305-L1 Pít Tông Cốt 1 (0.25)" (mã có >=2 dấu gạch ngang). Cho phép
+    //    thêm ký tự "+" trong mã (VD: "24701-KYZ-9000+00 PEDAL GEAR CHANGE") vì một số mã phụ
+    //    tùng (NCC Siêu Việt Mô Tô...) dùng dấu "+" để nối 2 đoạn số - nếu không cho phép, mã
+    //    này sẽ trượt khỏi rule 1 (do "+" không khớp charset) rồi rơi xuống rule Honda ở dưới,
+    //    bị cắt sai ngay tại dấu gạch nối ĐẦU TIÊN thay vì lấy trọn cả mã nhiều đoạn.
+    if (tokens.length > 1 && hyphenCountFirst >= 2 && /^[A-Za-z0-9+\-]{5,25}$/.test(first)) {
+      let firstClean = cleanCode(first);
+      if (firstClean.length >= 5 && /\d/.test(firstClean) && !first.endsWith('-')) {
+        return { code: first, name: tokens.slice(1).join(' ').trim() };
+      }
+    }
+
+    // 2. Honda: Mã thuần chữ-số (không có gạch ngang bên trong) đứng ngay trước MỘT dấu gạch nối,
+    //    dính liền vào tên hàng không có khoảng trắng, ví dụ: "16SF41100000-Bình Xăng",
+    //    "22FF341E0100-Bi Phuốc", "1S9F83B52000-Tem Xe ( Bạc 3 - 791)"
+    let mHonda = s.match(/^([A-Za-z0-9]{5,25})[-:](.*)$/);
+    if (mHonda) {
+      let candCode = mHonda[1].trim();
+      let candName = mHonda[2].trim();
+      // Chặn trường hợp toàn bộ chuỗi thực chất chỉ là MỘT mã phụ tùng nhiều đoạn gạch nối,
+      // không có tên mô tả đi kèm, ví dụ: "98907-05008-S9" hay "42301-55P-F5381-S9" (các mã
+      // ốc vít/bulong của NCC Siêu Việt Mô Tô). Phần "candName" trong các trường hợp này vẫn
+      // chỉ là ký tự chữ-số-gạch ngang (phần còn lại của mã), KHÔNG chứa khoảng trắng hay chữ
+      // tiếng Việt như một tên hàng mô tả thật sự. Nếu cứ tách, "candCode" sẽ bị cụt mất phần
+      // đuôi của mã thật, còn "candName" hiển thị ra là một mẩu mã vô nghĩa - khiến việc đối
+      // chiếu Mã hàng lẫn Tên hàng với danh mục MISA đều sai, dù nhìn qua tưởng như tách đúng.
+      // [v29] Tên hàng NGẮN 1 từ, viết liền không dấu cách, KHÔNG có dấu tiếng Việt và
+      // KHÔNG có chữ số - ví dụ "TEM", "Tem", "Xylanh", "C.D.I" (từ viết tắt/từ đơn thuần chữ
+      // cái, có thể kèm dấu chấm) - vẫn LÀ tên hàng thật, chỉ tình cờ không khớp 2 điều kiện
+      // "có khoảng trắng"/"có dấu tiếng Việt" phía trên. Trước đây các dòng này bị coi nhầm là
+      // "mẩu mã còn sót" (giống case "05008-S9") nên KHÔNG được tách, khiến Mã hàng bị bỏ
+      // trống và Tên hàng hiển thị dính nguyên cả mã phụ tùng phía trước - sai khi đối chiếu.
+      // Phân biệt với mẩu mã thật (luôn có ít nhất 1 chữ số, ví dụ "05008-S9", "31CA0V000"):
+      // chỉ coi là tên thật khi phần còn lại CHỈ gồm chữ cái/dấu chấm, KHÔNG chứa chữ số nào.
+      // [v32] Tên hàng thuần tiếng Anh 1 từ, viết liền không dấu cách, đứng NGAY TRƯỚC 1 cụm
+      // "(...)" ghi mã màu/lô ngay sau (ví dụ "VISOR(1848)", "TEM(996)") - KHÔNG khớp điều
+      // kiện v29 ở trên vì cụm "(1848)" khiến candName chứa cả chữ số lẫn dấu ngoặc, trong khi
+      // v29 chỉ chấp nhận tên thật là "CHỈ chữ cái/dấu chấm, không chữ số". Phân biệt với mẩu
+      // mã thật còn sót (luôn thuần chữ-số-gạch ngang, KHÔNG BAO GIỜ có dấu ngoặc đơn, ví dụ
+      // "05008-S9"): chỉ coi là tên thật kiểu này khi phần trước dấu ngoặc CHỈ gồm chữ cái
+      // (không lẫn số/gạch ngang) và toàn bộ candName kết thúc ngay sau dấu ")" đóng.
+      // [v32] Tên hàng thuần chữ cái có gạch nối ở giữa (không phải mẩu mã) - ví dụ "O-RING",
+      // "V-BELT" - vẫn LÀ tên hàng thật (không lẫn chữ số nào, khác hẳn mẩu mã còn sót luôn có
+      // ít nhất 1 chữ số như "05008-S9"), chỉ tình cờ có dấu gạch nối nên trước đây bị điều
+      // kiện "CHỈ gồm chữ cái/dấu chấm" (không cho phép gạch nối) loại nhầm.
+      // [v34] Tên hàng tiếng Anh GHÉP 2 TỪ bằng dấu phẩy, viết liền không dấu cách - ví dụ
+      // "BOLT,SOCKET" (hóa đơn Hòa Bình Minh) - cũng KHÔNG lẫn chữ số, chỉ tình cờ dùng dấu
+      // phẩy thay vì dấu cách/gạch nối để ngăn 2 từ. Trước đây bị lọt qua mọi điều kiện "tên
+      // hàng thật" ở trên (không khoảng trắng, không dấu tiếng Việt, không gạch nối, không
+      // ngoặc đơn) nên bị hiểu nhầm thành "mẩu mã còn sót", làm Mã hàng bị bỏ trống và Tên
+      // hàng hiển thị dính nguyên cả mã phụ tùng phía trước. Bổ sung dấu phẩy vào charset cho
+      // phép của "tên thuần chữ cái" - an toàn vì mẩu mã còn sót luôn có ít nhất 1 chữ số
+      // (đã bị loại trừ bởi điều kiện !/\d/.test(candName) đứng trước).
+      let looksLikeRealName = /\s/.test(candName) || /[À-ỹ]/i.test(candName) ||
+        (!/\d/.test(candName) && /^[A-Za-z.,\-]{2,}$/.test(candName)) ||
+        /^[A-Za-z]{2,}\([^)]{1,20}\)$/.test(candName);
+      if (/\d/.test(candCode) && looksLikeRealName) {
+        return { code: candCode, name: candName || candCode };
+      }
+    }
+
+    // 3. Suzuki: Mã nằm trong ngoặc đơn ở cuối tên, ví dụ: "CẦN ĐẠP THẮNG (43110-16H20V000)"
+    //    hoặc "CẠC TE SÊN TRÊN (TSD-BAC) (61310-31CA0V000)"
+    let parens = s.match(/\(([^)]+)\)/g);
+    if (parens && parens.length > 0) {
+      // Loại bỏ các ngoặc chỉ là ghi chú đóng gói/quy cách (VD: "24lon/ thùng"), không phải mã
+      // phụ tùng thật - mã phụ tùng thật không chứa các từ đơn vị tiếng Việt kiểu này.
+      const PACKAGING_NOTE_RE = /\b(lon|thùng|chai|gói|bao|kiện|hộp|cái|bộ|vỉ|túi|bó|kg|lít|lô|cuộn|tấm)\b/i;
+      // Loại bỏ thêm dạng ghi chú quy cách viết tắt kiểu "SỐ x SỐ..." (VD: "20x1LP" = 20 chai
+      // x 1 Lốc/Pack, "24x1CT" = 24 x 1 Carton...) - đây là cách NCC dầu nhớt (Hân Quân...) ghi
+      // quy cách đóng gói ngay trong ngoặc cuối tên hàng, không phải mã phụ tùng thật. Nếu không
+      // loại trừ, phần "(20x1LP)" này sẽ bị hiểu nhầm thành Mã hàng, làm mất quy cách đóng gói
+      // khỏi Tên hàng và có thể khiến đối chiếu với danh mục MISA (vốn có ghi quy cách trong tên)
+      // bị lệch khi kho có nhiều biến thể quy cách đóng gói khác nhau của cùng 1 sản phẩm.
+      const PACKAGING_QTY_RE = /^\d+\s*[xX]\s*\d+/;
+      // Loại bỏ thêm dạng ghi chú KÍCH CỠ lốp/săm thuần số trong ngoặc (VD: "(70/100-17)",
+      // "(80/90-17)", "(2.25/2.50-17B)") - rất phổ biến ở NCC lốp/săm xe máy khi 1 sản phẩm
+      // dùng chung cho nhiều cỡ vành, ghi thêm các cỡ tương thích ngay trong tên bằng nhiều
+      // cặp ngoặc liên tiếp. Một số cỡ lốp còn có 1 CHỮ CÁI ký hiệu kiểu vành đi kèm ngay sau
+      // dãy số (VD "17B", "17L") nên riêng việc yêu cầu "có chữ cái" (như bản vá trước) CHƯA
+      // đủ để loại trừ - "2.25/2.50-17B" vẫn có chữ "B" nên vẫn lọt qua. Mã phụ tùng THẬT
+      // (Honda/Suzuki/SYM...) chỉ dùng chữ-số-gạch ngang/dấu "+", KHÔNG BAO GIỜ chứa dấu "/"
+      // (ký hiệu khổ lốp, VD "70/90") hay dấu "." (số thập phân, VD "2.25") - đây là dấu hiệu
+      // đáng tin cậy hơn để phân biệt hẳn với mã phụ tùng thật, thay vì chỉ dựa vào có/không
+      // có chữ cái. Nếu không loại trừ, các cụm kích cỡ này bị hiểu nhầm thành "Mã hàng", bị
+      // cắt mất khỏi Tên hàng, làm sai lệch tên khi đối chiếu MISA.
+      // [v28] Mã phụ tùng thật (Honda/Suzuki/SYM...) LUÔN là 1 chuỗi chữ-số-gạch nối LIỀN MẠCH,
+      // KHÔNG chứa khoảng trắng ở giữa (VD "43110-16H20V000", "HH030-08000-00"). Ngược lại, các
+      // cụm chú thích tiếng Anh mô tả hàng có kèm số thứ tự như "(Absorber 1)", "(Spring clutch
+      // 10KGF)" LUÔN chứa khoảng trắng phân cách nhiều từ. Nếu không loại trừ bằng dấu hiệu
+      // khoảng trắng này, các cụm mô tả trên bị hiểu nhầm thành "Mã hàng" (do vẫn thỏa các điều
+      // kiện độ dài/có số/có chữ/không có "/."), bị cắt rời khỏi Tên hàng, làm sai lệch cả tên
+      // lẫn mã khi đối chiếu với danh mục MISA.
+      let codeCand = parens.map(p => p.slice(1, -1).trim()).filter(p => cleanCode(p).length >= 6 && /\d/.test(p) && /[A-Za-z]/.test(p) && !/[\/.]/.test(p) && !/\s/.test(p) && !PACKAGING_NOTE_RE.test(p) && !PACKAGING_QTY_RE.test(p));
+      if (codeCand.length > 0) {
+        let code = codeCand[codeCand.length - 1]; // Mã phụ tùng là ngoặc cuối cùng
+        // Cho phép khoảng trắng đệm ngay trong ngoặc quanh mã, ví dụ "( 92101-06022-0009)"
+        // hoặc "( HH030-08000-00 )", vì nhiều NCC (Suzuki...) in kèm dấu cách như vậy.
+        let name = s.replace(new RegExp('\\(\\s*' + code.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '\\s*\\)'), '').trim();
+        return { code: code, name: name || code };
+      }
+    }
+
+    // 4. Dự phòng: từ đầu tiên là mã đơn giản, có khoảng trắng tách khỏi tên
+    if (tokens.length > 1 && /^[A-Za-z0-9+\-]{5,25}$/.test(first)) {
+      let firstClean = cleanCode(first);
+      if (firstClean.length >= 5 && /\d/.test(firstClean) && !first.endsWith('-')) {
+        return { code: first, name: tokens.slice(1).join(' ').trim() };
+      }
+    }
+
+    return { code: '', name: s };
+  }
+
+  // --- 4. BÓC TÁCH PDF HOÀN HẢO MỌI HÃNG (HONDA, SUZUKI, SYM, YAMAHA) ---
+  document.getElementById('invoiceFileInput').addEventListener('change', async function(e) {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) await handleInvoiceFiles(files);
+    this.value = '';
+  });
+
+  // Danh sách các file hóa đơn ĐÃ nạp thành công cho lượt đối soát hiện tại (để gộp dồn qua nhiều lượt chọn)
+  let loadedInvoiceFilesMeta = [];
+
+  // Dò số hóa đơn + ngày lập từ TÊN FILE, theo quy ước đặt tên phổ biến của MISA meInvoice khi
+  // tải hàng loạt, ví dụ: "..._C26TMV_00004200_28042026_congtytnhh....pdf"
+  //   -> soHD = 00004200 (số hóa đơn), ngay = 28042026 (ddMMyyyy)
+  // Nếu tên file không theo quy ước này thì trả về null, khi đó sẽ dùng thẳng tên file làm nhãn.
+  function extractInvoiceMetaFromFilename(name) {
+    let m = String(name || '').match(/_(\d{5,10})_(\d{8})_/);
+    if (!m) return null;
+    let soHD = m[1].replace(/^0+(?=\d)/, '');
+    let dateStr = m[2];
+    let dd = dateStr.slice(0, 2), mm = dateStr.slice(2, 4), yyyy = dateStr.slice(4, 8);
+    return { soHD: soHD, ngay: `${dd}/${mm}/${yyyy}` };
+  }
+
+  // Nạp một hoặc NHIỀU file hóa đơn (PDF/XML/Excel) — dù chọn 1 lần 5 file, hay chọn/kéo thả
+  // "Chọn File Khác" thêm 5 LẦN riêng lẻ (mỗi lần 1 file), kết quả đều được CỘNG DỒN vào cùng
+  // 1 bảng đối soát duy nhất (không ghi đè lượt trước), cho tới khi bấm "🗑️ Xóa".
+  // Mỗi dòng hàng được gắn nhãn "srcLabel" cho biết nó thuộc hóa đơn nào (số HĐ + ngày).
+  async function handleInvoiceFiles(files) {
+    if (!files || files.length === 0) return;
+
+    isManualSearchMode = false;
+    document.getElementById('cardHeaderTitle').innerText = '📄 Hóa Đơn / Báo Giá Cần So Sánh';
+
+    let newItems = [];
+    let errors = [];
+
+    for (let file of files) {
+      // Nếu chưa dò được hãng/NCC nào từ trước (kể cả các lượt nạp trước đó), thử dò từ tên file này
+      if (!currentInvoiceSupplierBrand) {
+        currentInvoiceSupplierBrand = detectBrandKeyword(file.name);
+      }
+      let items = [];
+      try {
+        const fileNameLower = file.name.toLowerCase();
+        if (fileNameLower.endsWith('.xml')) {
+          items = await parseXmlInvoice(file);
+        } else if (fileNameLower.endsWith('.pdf')) {
+          items = await parsePdfInvoice(file);
+        } else {
+          items = await parseExcelInvoice(file);
+        }
+      } catch (e) {
+        errors.push(`${file.name}: ${e.message}`);
+        console.error(e);
+        continue;
+      }
+
+      if (!items || items.length === 0) {
+        errors.push(`${file.name}: Không nhận diện được dòng hàng nào`);
+        continue;
+      }
+
+      const meta = extractInvoiceMetaFromFilename(file.name);
+      const srcLabel = meta ? `HĐ số ${meta.soHD} - ${meta.ngay}` : file.name;
+
+      for (let it of items) {
+        it.srcLabel = srcLabel;
+        it.srcFile = file.name;
+        newItems.push(it);
+      }
+      loadedInvoiceFilesMeta.push({ name: file.name, size: file.size, srcLabel });
+    }
+
+    if (newItems.length === 0) {
+      alert('Không nhận diện được dòng hàng nào từ file vừa chọn.' + (errors.length ? '\n\n' + errors.join('\n') : ''));
+      return;
+    }
+
+    // GỘP THÊM vào các hóa đơn đã nạp từ trước (nếu có) — KHÔNG ghi đè
+    currentInvoiceItems = currentInvoiceItems.concat(newItems);
+    currentInvoiceItems.forEach((it, idx) => { it.stt = idx + 1; }); // đánh lại STT liên tục toàn bộ
+
+    const totalFiles = loadedInvoiceFilesMeta.length;
+    const totalSize = loadedInvoiceFilesMeta.reduce((s, f) => s + f.size, 0);
+    const labelList = loadedInvoiceFilesMeta.map(f => f.srcLabel);
+
+    currentInvoiceName = totalFiles > 1 ? `Gop_${totalFiles}_hoa_don` : loadedInvoiceFilesMeta[0].name;
+
+    document.getElementById('activeFileName').innerText =
+      totalFiles > 1 ? `${totalFiles} hóa đơn đã nạp (gộp chung)` : loadedInvoiceFilesMeta[0].name;
+    document.getElementById('activeFileMeta').innerText =
+      `(${(totalSize/1024).toFixed(1)} KB, ${currentInvoiceItems.length} dòng hàng)` +
+      (totalFiles > 1 ? ` — ${labelList.join(' | ')}` : '');
+    document.getElementById('activeFileBar').style.display = 'flex';
+    document.getElementById('btnClearInvoice').style.display = 'inline-flex';
+    document.getElementById('invoiceUploadContainer').style.display = 'none';
+
+    if (errors.length) {
+      alert('Đã nạp thêm, nhưng có ' + errors.length + ' lỗi (các file khác vẫn được xử lý bình thường):\n' + errors.join('\n'));
+    }
+
+    processComparison(currentInvoiceItems);
+  }
+
+  function clearCurrentInvoice() {
+    currentComparison = [];
+    currentInvoiceItems = [];
+    currentInvoiceName = '';
+    currentInvoiceSupplierBrand = '';
+    currentInvoiceWarehouseTag = '';
+    loadedInvoiceFilesMeta = [];
+    isManualSearchMode = false;
+    document.getElementById('cardHeaderTitle').innerText = '📄 Hóa Đơn / Báo Giá Cần So Sánh';
+    document.getElementById('invoiceFileInput').value = '';
+    document.getElementById('activeFileBar').style.display = 'none';
+    document.getElementById('summaryBar').style.display = 'none';
+    document.getElementById('btnClearInvoice').style.display = 'none';
+    document.getElementById('invoiceUploadContainer').style.display = 'block';
+    renderComparisonTable([]);
+  }
+
+  async function parseXmlInvoice(file) {
+    const text = await file.text();
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(text, 'text/xml');
+
+    const parseError = xmlDoc.querySelector('parsererror');
+    if (parseError) {
+      throw new Error('File XML không đúng định dạng: ' + parseError.textContent);
+    }
+
+    // Dò NCC/hãng từ TÊN NGƯỜI BÁN trên hóa đơn XML (nếu tên file chưa dò ra hãng).
+    // Cấu trúc hóa đơn điện tử TT78/NĐ123 thường có khối người bán tên thẻ NBan/NguoiBan/Seller,
+    // bên trong có thẻ Ten là tên công ty bán hàng (VD: "CÔNG TY TNHH HONDA VIỆT NAM").
+    if (!currentInvoiceSupplierBrand) {
+      let sellerBlockTags = ['NBan', 'NguoiBan', 'Seller', 'DVBH'];
+      let sellerName = '';
+      const allEls = xmlDoc.getElementsByTagName('*');
+      for (let e of allEls) {
+        if (e.localName && sellerBlockTags.some(t => t.toLowerCase() === e.localName.toLowerCase())) {
+          let tenEl = null;
+          const children = e.getElementsByTagName('*');
+          for (let c of children) {
+            if (c.localName && c.localName.toLowerCase() === 'ten') { tenEl = c; break; }
+          }
+          if (tenEl && tenEl.textContent) { sellerName = tenEl.textContent.trim(); break; }
+        }
+      }
+      // Dự phòng: nếu không tìm được đúng khối người bán, quét toàn bộ nội dung XML
+      currentInvoiceSupplierBrand = detectBrandKeyword(sellerName) || detectBrandKeyword(text);
+    }
+
+    const parsedItems = [];
+
+    const getTagVal = (parent, tags) => {
+      for (let tag of tags) {
+        let el = parent.querySelector(tag);
+        if (!el) {
+          const allEls = parent.getElementsByTagName('*');
+          for (let e of allEls) {
+            if (e.localName && e.localName.toLowerCase() === tag.toLowerCase()) {
+              el = e;
+              break;
+            }
+          }
+        }
+        if (el && el.textContent) {
+          return el.textContent.trim();
+        }
+      }
+      return '';
+    };
+
+    let itemNodes = [];
+    const candidateItemTags = ['HHDVu', 'Item', 'Product', 'HangHoa', 'ChiTietHHDVu', 'InvItem', 'Row'];
+    
+    for (let tag of candidateItemTags) {
+      const allEls = xmlDoc.getElementsByTagName('*');
+      const matched = Array.from(allEls).filter(e => e.localName && e.localName.toLowerCase() === tag.toLowerCase());
+      if (matched.length > 0) {
+        itemNodes = matched;
+        break;
+      }
+    }
+
+    if (itemNodes.length === 0) {
+      const allEls = xmlDoc.getElementsByTagName('*');
+      for (let el of allEls) {
+        if (getTagVal(el, ['THHHoa', 'TenHang', 'ItemName', 'TenHH']) && getTagVal(el, ['DGia', 'DonGia', 'UnitPrice', 'ThTien', 'ThanhTien'])) {
+          let hasChildItems = Array.from(el.children).some(c => candidateItemTags.includes(c.localName));
+          if (!hasChildItems) {
+            itemNodes.push(el);
+          }
+        }
+      }
+    }
+
+    for (let i = 0; i < itemNodes.length; i++) {
+      const node = itemNodes[i];
+      
+      let sttStr = getTagVal(node, ['STT', 'Stt', 'ItemNo', 'LineNo']);
+      let stt = parseInt(sttStr, 10) || (i + 1);
+
+      let explicitCode = getTagVal(node, ['MHHoa', 'MaHH', 'MaHang', 'ItemCode', 'ProductCode', 'Code']);
+      let rawName = getTagVal(node, ['THHHoa', 'TenHH', 'TenHang', 'ItemName', 'ProductName', 'Name']);
+      let unit = getTagVal(node, ['DVTinh', 'DVT', 'Unit', 'DonViTinh']) || 'Chiếc';
+      
+      let qtyStr = getTagVal(node, ['SLuong', 'SoLuong', 'Quantity', 'Qty']).replace(/,/g, '.');
+      let qty = parseFloat(qtyStr) || 1.0;
+
+      let priceStr = getTagVal(node, ['DGia', 'DonGia', 'UnitPrice', 'Price']).replace(/\./g, '').replace(/,/g, '.');
+      let price = parseFloat(priceStr) || 0.0;
+
+      let amtStr = getTagVal(node, ['ThTien', 'ThanhTien', 'Amount', 'TotalAmount']).replace(/\./g, '').replace(/,/g, '.');
+      let amount = parseFloat(amtStr) || (qty * price);
+
+      let vatStr = getTagVal(node, ['TSuat', 'ThueSuat', 'VATRate', 'TSGTGT', 'TyLeThue', 'Vat', 'ThueSuatGTGT']);
+      let vatRate = normalizeVatValue(vatStr);
+
+      if (!price && amount && qty) {
+        price = amount / qty;
+      }
+
+      if (!rawName && explicitCode) {
+        rawName = explicitCode;
+      }
+      if (!rawName) continue;
+
+      let splitRes = splitPartCodeAndName(rawName);
+      let finalCode = explicitCode || splitRes.code;
+
+      parsedItems.push({
+        stt: stt,
+        rawName: rawName,
+        invCode: finalCode,
+        invName: splitRes.name || rawName,
+        unit: unit,
+        qty: qty,
+        price: price,
+        vat: vatRate,
+        invBrand: detectBrandKeyword(rawName) // dự phòng theo từng dòng, ưu tiên NCC chung của cả hóa đơn khi khớp
+      });
+    }
+
+    return parsedItems;
+  }
+
+
+  function readAsArrayBufferAsync(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Không thể đọc file nhị phân'));
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  async function parsePdfInvoice(file) {
+    const arrayBuffer = await readAsArrayBufferAsync(file);
+    const loadingTask = pdfjsLib.getDocument({
+      data: new Uint8Array(arrayBuffer),
+      isEvalSupported: false,
+      useWorkerFetch: false,
+      disableFontFace: false
+    });
+    const pdf = await loadingTask.promise;
+    let allParsedItems = [];
+    let fullDocText = '';
+
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const content = await page.getTextContent();
+      
+      let rawLines = [];
+      let hasMultiLine = content.items.some(it => it.str.includes('\n'));
+
+      if (hasMultiLine) {
+        // Hóa đơn MISA meInvoice (Suzuki, SYM): Văn bản chứa sẵn dấu xuống dòng
+        let fullPageText = content.items.map(it => it.str).join('\n');
+        rawLines = fullPageText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      } else {
+        // Hóa đơn VNPT / Từng cụm (Honda): Gom dòng theo tọa độ Y
+        let items = content.items.map(it => ({
+          str: it.str.trim(),
+          x: it.transform[4],
+          y: it.transform[5]
+        })).filter(it => it.str.length > 0);
+
+        let yGroups = new Map();
+        for (let item of items) {
+          let matchedY = null;
+          for (let yk of yGroups.keys()) {
+            if (Math.abs(yk - item.y) <= 4.5) {
+              matchedY = yk;
+              break;
+            }
+          }
+          if (matchedY === null) {
+            matchedY = item.y;
+            yGroups.set(matchedY, []);
+          }
+          yGroups.get(matchedY).push(item);
+        }
+
+        let linesData = [];
+        for (let [y, group] of yGroups.entries()) {
+          group.sort((a, b) => a.x - b.x);
+          let lineStr = group.map(i => i.str).join(' ').trim();
+          linesData.push([y, lineStr]);
+        }
+
+        // Kiểm tra chiều tọa độ Y (chuẩn giảm dần hay ngược tăng dần)
+        let headerYs = linesData.filter(l => /HÓA ĐƠN|STT|TÊN HÀNG|VAT INVOICE/i.test(l[1])).map(l => l[0]);
+        let footerYs = linesData.filter(l => /TỔNG CỘNG|NGƯỜI BÁN|KÝ BỞI|BẰNG CHỮ|CỘNG TIỀN/i.test(l[1])).map(l => l[0]);
+        let yDescending = true;
+        if (headerYs.length > 0 && footerYs.length > 0) {
+          let avgH = headerYs.reduce((a,b)=>a+b,0)/headerYs.length;
+          let avgF = footerYs.reduce((a,b)=>a+b,0)/footerYs.length;
+          if (avgH < avgF) yDescending = false;
+        }
+
+        if (yDescending) linesData.sort((a,b) => b[0] - a[0]);
+        else linesData.sort((a,b) => a[0] - b[0]);
+
+        rawLines = linesData.map(l => l[1]);
+      }
+
+      // [v29] Một số PDF (lỗi font/ToUnicode CMap của phần mềm phát hành hóa đơn) thỉnh
+      // thoảng xuất ra 1 ký tự thuộc vùng "Private Use Area" (U+E000-U+F8FF) thay cho dấu
+      // gạch nối "-" thật giữa Mã hàng và Tên hàng, ví dụ "B63E21500200\uE088Cò mổ" thay vì
+      // "B63E21500200-Cò mổ". Ký tự PUA không bao giờ là nội dung hợp lệ trong hóa đơn tiếng
+      // Việt/Anh, nên có thể thay thế an toàn bằng "-" để việc bóc tách Mã hàng/Tên hàng phía
+      // sau (vốn dựa vào dấu gạch nối) hoạt động đúng, thay vì làm cả dòng dính liền không
+      // tách được, hoặc dữ liệu hiển thị lẫn ký tự lạ (ô vuông/hộp trống) khi xem hóa đơn.
+      // [v30] Cùng 1 lỗi font/CMap nói trên đôi khi KHÔNG xuất hiện ở vị trí gạch nối Mã-Tên,
+      // mà lại xuất hiện ở CẶP dấu "*...*" bao quanh mã màu/kiểu xe cuối tên hàng (ví dụ
+      // "Bộ Ốp Trung Tâm Bên Phải *Nhb83*"), khiến 2 ký tự PUA đứng tách biệt (có khoảng
+      // trắng bao quanh) chứ KHÔNG dính liền 2 chuỗi chữ-số như trường hợp Mã-Tên. Nếu áp
+      // dụng thẳng quy tắc thay "-" ở trên cho cả 2 PUA này, tên hàng sẽ hiển thị sai thành
+      // "Bên PhảI -Nhb83-" (đổi cả dấu trang trí *...* thành gạch nối, dễ gây hiểu nhầm khi
+      // đối chiếu MISA) thay vì khôi phục đúng lại thành "*Nhb83*" như dụng ý ban đầu của
+      // NCC. Phân biệt 2 trường hợp bằng NGỮ CẢNH xung quanh: cặp PUA bao dấu-sao luôn đứng
+      // NGAY SAU 1 khoảng trắng, bọc quanh ĐÚNG 1 cụm chữ-số ngắn (không khoảng trắng bên
+      // trong) rồi NGAY TRƯỚC khoảng trắng/cuối dòng - còn PUA đóng vai trò gạch nối Mã-Tên
+      // luôn dính liền trực tiếp vào ký tự chữ/số ở cả 2 bên (không có khoảng trắng ngăn
+      // cách). Xử lý cặp dấu-sao TRƯỚC, phần PUA còn lại (trường hợp Mã-Tên) mới thay bằng
+      // "-" như cũ.
+      // [v31] Biến thể thứ 3 của cùng lỗi font/CMap trên: cặp PUA bao quanh mã màu/lô hàng
+      // THUẦN SỐ (ví dụ "996", "0996", "1124", "1848") vốn dĩ LUÔN là dấu ngoặc đơn "(...)"
+      // (ghi mã màu/lô ngay sau tên hàng, đối chiếu các dòng lân cận không lỗi font in đúng
+      // "YẾM XE(996)", "MẶT NẠ (0996)"), KHÔNG BAO GIỜ là cặp dấu-sao "*...*" (vốn chỉ dùng
+      // cho mã màu/kiểu xe CÓ CHỮ như "*Nh1*", "*R340C*"). Khoảng trắng đứng trước cặp PUA
+      // này KHÔNG ổn định - cùng 1 kiểu lỗi có lúc dính liền chữ cái tên hàng ("...THÂN996"),
+      // có lúc lại có khoảng trắng ("...THÂN 1848") tùy dòng - nên KHÔNG thể dùng khoảng
+      // trắng để phân biệt với quy tắc dấu-sao bên dưới. Thay vào đó, nhận diện bằng chính
+      // NỘI DUNG bên trong cặp PUA: chỉ gồm thuần chữ số (không lẫn chữ cái) → luôn là dấu
+      // ngoặc đơn, bất kể có/không khoảng trắng bao quanh. Quy tắc này PHẢI chạy TRƯỚC quy
+      // tắc dấu-sao ở dưới, nếu không quy tắc dấu-sao (khớp cả khi có khoảng trắng bao quanh)
+      // sẽ "giành" mất các trường hợp mã thuần số có khoảng trắng đứng trước, biến nhầm
+      // "(1848)" thành "*1848*".
+      rawLines = rawLines.map(l => l.replace(/[\uE000-\uF8FF](\d{1,6})[\uE000-\uF8FF]/g, '($1)'));
+      rawLines = rawLines.map(l => l.replace(/(^|\s)[\uE000-\uF8FF]([A-Za-z0-9]{1,15})[\uE000-\uF8FF](?=\s|$)/g, '$1*$2*'));
+      rawLines = rawLines.map(l => l.replace(/[\uE000-\uF8FF]/g, '-'));
+
+      // [v34] Một số mẫu hóa đơn MISA (mẫu có cột "Tính chất", VD hóa đơn Công Ty TNHH Hòa
+      // Bình Minh) canh các cột SỐ theo bề rộng cố định, khiến PDF TRÀN DÒNG ngay GIỮA 1 con
+      // số đã định dạng dấu chấm phân cách nghìn - ví dụ "1.265.440" (Đơn giá) bị cắt thành 2
+      // dòng vật lý riêng biệt "1.265.44" rồi "0" đứng một mình ở dòng kế tiếp - khác hẳn kiểu
+      // ngắt dòng bình thường ở ranh giới giữa các TỪ. Nếu không ghép lại, "1.265.44" và "0" bị
+      // hiểu nhầm thành 2 con số ĐỘC LẬP khi bóc tách theo token (dò từ phải sang trái), làm
+      // sai lệch hoàn toàn Số lượng/Đơn giá của cả dòng hàng (và có thể làm rớt luôn dòng hàng
+      // đó nếu phép dò số liệu thất bại). Nhận diện: dòng đứng trước là 1 số đã có nhóm nghìn
+      // (>=1 dấu chấm) nhưng nhóm CUỐI CÙNG (sau dấu chấm cuối) chỉ có 1-2 chữ số thay vì đúng
+      // 3 chữ số theo quy tắc định dạng chuẩn - số hợp lệ thật sự KHÔNG BAO GIỜ kết thúc bằng 1
+      // nhóm thiếu chữ số như vậy - và dòng NGAY SAU nó chỉ vỏn vẹn 1-2 chữ số, không lẫn ký tự
+      // nào khác (chắc chắn là phần đuôi số bị cắt, không phải 1 dòng nội dung khác như STT).
+      for (let li = 0; li < rawLines.length - 1; li++) {
+        if (/^\d{1,3}(?:\.\d{3})*\.\d{1,2}$/.test(rawLines[li]) && /^\d{1,2}$/.test(rawLines[li + 1])) {
+          rawLines[li] = rawLines[li] + rawLines[li + 1];
+          rawLines.splice(li + 1, 1);
+        }
+      }
+
+      fullDocText += ' ' + rawLines.join(' ');
+
+      // --- BÓC TÁCH DÒNG HÀNG HÓA (hỗ trợ tên hàng bị ngắt thành NHIỀU dòng bất kỳ, với
+      // dòng chứa STT+số liệu (ĐVT/SL/Đơn giá/Thành tiền/Thuế suất/Tiền thuế) có thể nằm ở
+      // ĐẦU, GIỮA hay CUỐI khối tên hàng nhiều dòng - do MISA canh giữa các cột số liệu theo
+      // chiều dọc so với ô "Tên hàng hóa" (ô cao nhất trong hàng khi tên phải xuống nhiều
+      // dòng). Bản cũ chỉ ghép được đúng 1 dòng ngay trước + 1 dòng ngay sau dòng số liệu
+      // (kiểu Suzuki, tên ngắn xuống 2 dòng); với NCC có tên hàng dài xuống 3-6 dòng (VD:
+      // Siêu Việt Mô Tô ghi rõ model/xuất xứ/NSX ngay trong tên hàng), phần tên ở xa dòng
+      // số liệu bị RỚT MẤT hoặc bị GHÉP NHẦM sang dòng hàng kế tiếp/trước đó.
+      //
+      // Nguyên lý: gom các dòng "mồ côi" (không có STT, không có số liệu - chỉ là mảnh tên
+      // hàng) thành 1 khối "đang chờ" (pending, stt=null). Khi gặp 1 dòng có STT hợp lệ ở
+      // đầu, ghép STT + phần còn lại của dòng đó vào khối đang chờ (vì STT luôn xuất hiện
+      // cùng lúc với các cột số liệu). Sau khi khối đã đủ số liệu, NẾU khối được ghép từ ≥2
+      // mảnh (tên hàng thực sự dài, nhiều dòng) thì KHÔNG đóng khối ngay - tiếp tục nhận
+      // thêm các dòng mồ côi kế tiếp làm "phần đuôi" tên hàng, cho đến khi gặp STT hợp lệ
+      // TIẾP THEO hoặc dòng dừng. Nếu khối chỉ gồm ĐÚNG 1 dòng (tên ngắn, STT+tên+số liệu
+      // gọn 1 dòng) thì đóng khối ngay lập tức, không chờ đuôi.
+      // [v28] Bổ sung ĐVT "Bánh" (dùng cho mặt hàng căm/nan hoa xe máy, VD "Căm D.I.D trước
+      // SIRIUS 9G 183.5-184 Thailand"). Nếu KHÔNG có trong danh sách, token "Bánh" bị hiểu
+      // nhầm là 1 phần của TÊN HÀNG (bị chèn lẫn vào giữa tên do dòng số liệu tách rời khỏi
+      // dòng tên hàng nhiều dòng), còn ĐVT trả về mặc định sai thành "Chiếc".
+      const UNIT_TOKEN_RE_PDF = /^(chiếc|cái|con|bộ|bình|lít|hộp|kg|mét|lô|cuộn|tấm|lon|chai|can|xô|phuy|cụm|thùng|gói|bao|kiện|đôi|túi|bó|vỉ|ống|tá|cây|sợi|cặp|tuýp|tuyp|hũ|hủ|thanh|viên|chùm|ly|xấp|bánh)$/i;
+      const STOP_RE_PDF = /^(STT|CỘNG(\s|:|$)|CỘNG TIỀN|Thuế$|THUẾ SUẤT|TỔNG TIỀN|TỔNG SỐ LƯỢNG|SỐ TIỀN|NGƯỜI MUA|NGƯỜI BÁN|KÝ BỞI|TRA CỨU|PHÁT HÀNH|TRANG|CÔNG TY|MÃ SỐ THUẾ|ĐỊA CHỈ|ĐIỆN THOẠI|HÓA ĐƠN|VAT INVOICE|TIỀN TRƯỚC THUẾ|TỔNG CỘNG|TỔNG HỢP|TỔNG TIỀN KHÔNG KÊ KHAI|TIỀN KHÔNG CHỊU THUẾ|TIỀN CHỊU THUẾ SUẤT|Số tiền viết|Mã CQT|Mẫu số|Ký hiệu|Số:|Cộng tiền hàng|Tra cứu tại|Phát hành bởi|Signature|Ký ngày|Ký bởi)/i;
+
+      // [v19 - Mẫu MISA meInvoice "Mai Thảo" và tương tự] Tiêu đề bảng bị chia thành NHIỀU
+      // dòng vật lý do 2-3 tầng chú thích tiếng Anh trong ngoặc bị canh giữa cột và tách
+      // dòng riêng, ví dụ dòng "STT Tên hàng hóa..." (dòng chính, có đủ "Đơn vị tính" nên
+      // KHÔNG bị coi là tiêu đề 2 tầng bởi cờ skipNextAfterHeader) vẫn có thể được theo sau
+      // bởi các dòng "vụn" thuần chú thích cột như "chiết khấu (Discount", "(No) (Name of
+      // goods and services) (Unit) (Quantity) (Amount excluding VAT)", "(Unit price)
+      // Amount)". Nếu KHÔNG lọc riêng, các dòng này bị hiểu nhầm thành "tên hàng mồ côi"
+      // của mặt hàng STT=1, kéo theo toàn bộ các mặt hàng có tên ngắt 2 dòng phía sau bị
+      // đóng khối sai/mất dữ liệu (do lệch expectedSuffixCount). Các dòng này CHỈ gồm toàn
+      // chú thích cột (không có nội dung hàng hóa thật đi kèm) nên có thể loại bỏ hẳn,
+      // tương tự STOP_RE_PDF, mà không ảnh hưởng tới khối đang mở (luôn xảy ra trước khi
+      // có khối hàng hóa nào được mở, ngay sau dòng tiêu đề "STT...").
+      const HEADER_FRAG_RE_PDF = /^chiết\s*khấu\s*\(\s*discount\)?\s*$|^\(no\)\s*\(name of goods and services\)|^\(unit price\)\s*amount\)\s*$|^\(discount\s*amount\)\s*$/i;
+
+      // [v24 - Mẫu hóa đơn có tiêu đề bảng chia NHIỀU TẦNG (>2 dòng), VD "TORA ASIA" với 10
+      // cột (có thêm Thuế suất/Tiền thuế/Thành tiền sau thuế GTGT trên từng dòng hàng) khiến
+      // tiêu đề bảng bị bẻ thành tới 9 dòng vật lý xen kẽ Việt/Anh, ví dụ:
+      //   "(No) (Unit) (Quantity) (Discount (VAT (Total amount"
+      //   "services) khấu (Total (VAT"
+      //   "amount) amount) with VAT)"
+      //   "(Unit price) amount) rate)"
+      // Cơ chế "skipNextAfterHeader" cũ chỉ bỏ được ĐÚNG 1 dòng ngay sau dòng "STT...", nên
+      // các dòng vụn còn lại (3-7 dòng tùy mẫu) bị hiểu nhầm thành "tên hàng mồ côi" của mặt
+      // hàng STT=1, làm lệch số dòng "đuôi" cần chờ (expectedSuffixCount), kéo theo nhiều mặt
+      // hàng kế tiếp bị nuốt mất/gộp sai. Nhận diện tổng quát: 1 dòng CHỈ gồm toàn các từ/cụm
+      // nằm trong danh sách từ vựng tiêu đề cột đã biết (không có tên hàng/mã hàng/số liệu
+      // thật đi kèm) thì chắc chắn là rác tiêu đề, có thể loại bỏ an toàn mà không ảnh hưởng
+      // tên hàng thật (tên hàng luôn chứa ít nhất 1 từ ngoài danh sách này: tên riêng, mã, số).
+      const HEADER_VOCAB_PDF = new Set([
+        'no', 'unit', 'quantity', 'discount', 'vat', 'total', 'amount', 'rate', 'services', 'with',
+        'name', 'of', 'goods', 'and', 'price', 'before', 'after',
+        'stt', 'dvt', 'so', 'luong', 'don', 'gia', 'truoc', 'chiet', 'khau', 'tien', 'thanh', 'sau',
+        'thue', 'suat', 'gtgt', 'hang', 'hoa', 'dich', 'vu', 'ten'
+      ]);
+      function isHeaderVocabOnlyLine(line) {
+        let words = String(line || '').replace(/[(),.:]/g, ' ').split(/\s+/).filter(Boolean);
+        if (words.length < 2) return false; // dòng quá ngắn (VD 1 số trang) không xét ở đây
+        for (let w of words) {
+          if (!HEADER_VOCAB_PDF.has(removeVietnameseTones(w).toLowerCase())) return false;
+        }
+        return true;
+      }
+
+      // [v27] Cắt bỏ số trang kiểu " 1/3" / " Trang 2/3" dính vào CUỐI tên hàng (do PDF nối
+      // liền dòng chân trang vào dòng cuối bảng). CHỈ coi là số trang thật khi mẫu số (tổng
+      // số trang) là 1 con số nhỏ hợp lý (1-30) VÀ tử số (trang hiện tại) <= mẫu số - để
+      // KHÔNG nhầm với các cụm số/số khác vốn là nội dung thật của tên hàng, ví dụ ngày
+      // tháng dạng "quý 02/2026" (dòng "Chiết khấu doanh số quý 02/2026") có mẫu số là năm
+      // (2026), lớn hơn hẳn số trang thực tế của bất kỳ hóa đơn nào, nên phải giữ nguyên.
+      function stripTrailingPageMarker(text) {
+        return String(text || '').replace(/\s+(?:Trang\s*)?(\d{1,3})\s*\/\s*(\d{1,3})$/i, (whole, p1, p2) => {
+          let n = parseInt(p1, 10), d = parseInt(p2, 10);
+          if (d >= 1 && d <= 30 && n >= 1 && n <= d) return '';
+          return whole; // không phải số trang thật -> giữ nguyên, không cắt
+        });
+      }
+
+      // Nối 2 đoạn text: KHÔNG chèn khoảng trắng nếu đoạn trước kết thúc bằng "-" hoặc "("
+      // (trường hợp 1 mã phụ tùng bị ngắt dòng ngay giữa, ví dụ "(61310-" + "31CA0V000)").
+      function joinFrag(base, frag) {
+        base = String(base || ''); frag = String(frag || '').trim();
+        if (!base) return frag;
+        if (!frag) return base;
+        if (/[-(]$/.test(base)) return base + frag;
+        return base + ' ' + frag;
+      }
+
+      // Thử bóc tách "đuôi số liệu" (ĐVT/SL/Đơn giá/Thành tiền/[Thuế suất]) từ CUỐI 1 chuỗi
+      // text, theo đúng thứ tự cột từ PHẢI SANG TRÁI như hóa đơn thật. Trả về null nếu chưa
+      // đủ số liệu hợp lệ (khi đó cần gộp thêm dòng tiếp theo rồi thử lại).
+      function extractDataTail(text, allowEmptyName) {
+        let tokens = String(text || '').trim().split(/\s+/).filter(Boolean);
+        if (tokens.length < 3) return null;
+
+        const parseNum = (str) => {
+          if (!str) return null;
+          let s = str.replace(/[%đĐ]/g, '').replace(/\./g, '').replace(',', '.').trim();
+          let n = parseFloat(s);
+          return isNaN(n) ? null : n;
+        };
+
+        // [v24 - Hàng khuyến mại/tặng kèm không thu tiền, VD "TORA ASIA"] Một số mẫu hóa
+        // đơn để trống toàn bộ Đơn giá/Thành tiền của dòng hàng 0đ, chỉ còn lại ký tự "X"
+        // (không áp dụng) ở 1-2 cột Thuế suất/Tiền thuế GTGT cuối dòng, ví dụ dòng thô
+        // "... TBS - P02 12 Bộ 1,00 X X". Nếu KHÔNG nhận diện riêng, các token "X" khiến
+        // việc dò số liệu từ phải sang trái thất bại hoàn toàn (parseNum("X") = null), làm
+        // khối hàng này bị coi là "chưa đủ số liệu" và tiếp tục nuốt nhầm các dòng mồ côi
+        // của mặt hàng KẾ TIẾP làm phần đuôi tên hàng, phá vỡ toàn bộ các khối hàng sau đó.
+        let trailingX = 0;
+        for (let k = tokens.length - 1; k >= 0; k--) {
+          if (/^X$/i.test(tokens[k])) trailingX++;
+          else break;
+        }
+        if (trailingX > 0) {
+          let idxX = tokens.length - 1 - trailingX;
+          let qtyParsed = parseNum(tokens[idxX]);
+          if (qtyParsed !== null && qtyParsed > 0 && qtyParsed < 1000000) {
+            let unitCand = tokens[idxX - 1] || '';
+            let hasUnit = UNIT_TOKEN_RE_PDF.test(unitCand);
+            let nameEndIdx = hasUnit ? idxX - 2 : idxX - 1;
+            let namePart = tokens.slice(0, nameEndIdx + 1).join(' ').trim();
+            if (namePart || allowEmptyName) {
+              return { namePart, unit: hasUnit ? unitCand : 'Chiếc', qty: qtyParsed, unitPrice: 0, amt: 0, vatRate: '' };
+            }
+          }
+        }
+
+        let idx = tokens.length - 1;
+        let vatRate = '';
+        let pctIdx = -1;
+        for (let k = tokens.length - 1; k >= 0 && k >= tokens.length - 4; k--) {
+          let tk = tokens[k];
+          if (tk.includes('%') || ['8%','10%','5%','0%'].includes(tk)) {
+            let trailingAllNumeric = true;
+            for (let j = k + 1; j < tokens.length; j++) {
+              if (parseNum(tokens[j]) === null) { trailingAllNumeric = false; break; }
+            }
+            if (trailingAllNumeric) { pctIdx = k; break; }
+          }
+        }
+        if (pctIdx !== -1) {
+          vatRate = normalizeVatValue(tokens[pctIdx]);
+          idx = pctIdx - 1;
+        }
+
+        let amt = parseNum(tokens[idx]);
+        if (amt === null) return null; // chưa đủ số liệu - có thể còn thiếu dòng phía sau
+        idx--;
+
+        let unitPrice = parseNum(tokens[idx]);
+        if (unitPrice === null) {
+          // Trường hợp hàng khuyến mãi/tặng kèm mà CẢ Đơn giá LẪN Thành tiền đều để TRỐNG
+          // HOÀN TOÀN (không phải chỉ trống Đơn giá) - dòng chỉ còn lại ĐÚNG 1 con số (Số
+          // lượng) ngay sau ĐVT, ví dụ "...Cái 5" (không có Đơn giá/Thành tiền nào cả). Khi
+          // đó, con số vừa thử làm "Thành tiền" (amt) ở trên thực chất chính là SỐ LƯỢNG, và
+          // token đứng ngay trước nó (đang thất bại khi thử làm "Đơn giá") thực chất chính là
+          // ĐVT - nếu không xử lý riêng, cả dòng hàng này sẽ bị RỚT MẤT hoàn toàn.
+          if (UNIT_TOKEN_RE_PDF.test(tokens[idx])) {
+            let qtyOnly = amt;
+            let unitOnly = tokens[idx];
+            let namePartOnly = tokens.slice(0, idx).join(' ').trim();
+            if (!namePartOnly && !allowEmptyName) return null;
+            return { namePart: namePartOnly, unit: unitOnly, qty: qtyOnly, unitPrice: 0, amt: 0, vatRate };
+          }
+          return null; // chưa đủ số liệu - có thể còn thiếu dòng phía sau
+        }
+        idx--;
+
+        let qty, unit;
+        let qtyToken = tokens[idx];
+        let qtyParsed = parseNum(qtyToken);
+        if (qtyParsed !== null && qtyParsed > 0 && qtyParsed < 1000000) {
+          qty = qtyParsed;
+          idx--;
+          // [v24] Chỉ coi là đã "tiêu thụ" 1 token ĐVT thật khi token đó THỰC SỰ tồn tại
+          // (idx còn hợp lệ, >= 0). Trước đây khi idx đã âm (dòng không có cột ĐVT/tên hàng
+          // nào phía trước, VD dòng điều chỉnh/chiết khấu tổng thuần số liệu), code vẫn mặc
+          // định unit='Chiếc' RỒI trừ thêm idx một lần nữa như thể vừa tiêu thụ token thật,
+          // khiến idx bị âm sâu hơn mức cần thiết và làm namePart (tokens.slice(0, idx+1))
+          // cắt nhầm mất token cuối cùng của phần số liệu, biến nó thành rác dính vào tên.
+          if (idx >= 0 && UNIT_TOKEN_RE_PDF.test(tokens[idx])) { unit = tokens[idx]; idx--; }
+          else { unit = 'Chiếc'; }
+        } else if (UNIT_TOKEN_RE_PDF.test(qtyToken)) {
+          // Hàng khuyến mãi/tặng kèm 0đ: cột "Đơn giá" bị in TRỐNG, dòng chỉ còn 2 số.
+          qty = unitPrice;
+          unitPrice = 0;
+          unit = qtyToken;
+          idx--;
+        } else {
+          qty = 1;
+          if (idx >= 0 && UNIT_TOKEN_RE_PDF.test(tokens[idx])) { unit = tokens[idx]; idx--; }
+          else { unit = 'Chiếc'; }
+        }
+
+        let namePart = tokens.slice(0, idx + 1).join(' ').trim();
+        if (!namePart && !allowEmptyName) return null;
+
+        return { namePart, unit, qty, unitPrice, amt, vatRate };
+      }
+
+      // --- [v22] MẪU HÓA ĐƠN "Mẫu số 1" CÓ CỘT "TÍNH CHẤT" (VD hóa đơn 00000318) ---
+      // Mẫu này có thêm 1 cột "Tính chất" đứng NGAY TRƯỚC cột "Tên hàng hóa, dịch vụ", với
+      // giá trị luôn là "Hàng hóa, dịch vụ" lặp lại cho mọi dòng. Điểm khác biệt CHẾT NGƯỜI so
+      // với các mẫu khác: khi PDF bẻ dòng, giá trị "Hàng hóa, dịch vụ" của 1 dòng hàng bị chẻ
+      // thành ĐÚNG 3 dòng vật lý RIÊNG BIỆT "Hàng" / "hóa," / "dịch vụ", trong đó mảnh "hóa,"
+      // lại nằm CHUNG 1 dòng với STT + các cột số liệu (ĐVT/SL/[Đơn giá]/Thành tiền/Thuế suất),
+      // còn 2 mảnh "Hàng" (mở đầu) và "dịch vụ" (kết thúc) đứng tách biệt, đóng vai trò 2 dấu
+      // "mốc" bao quanh trọn 1 khối hàng hóa. Ngoài ra, mỗi khi cột "Đơn giá" có phần thập phân
+      // (ví dụ "82.407,41"), do bề rộng cột hẹp, MISA lại tách luôn giá trị này thành 2 mảnh nằm
+      // ở 2 dòng khác nhau xen kẽ với 2 dòng tên hàng (mảnh đầu dính vào cuối dòng tên hàng 1,
+      // mảnh đuôi dính vào cuối dòng tên hàng 2) - khi đó dòng "hóa," sẽ THIẾU hẳn cột Đơn giá
+      // (chỉ còn ĐVT/SL/Thành tiền/Thuế suất), là dấu hiệu để nhận biết cần ghép lại 2 mảnh này.
+      // Bộ máy bóc tách tổng quát bên dưới (thiết kế cho mẫu 1-dòng-1-cột-liền-mạch) không xử lý
+      // được kiểu chẻ cột xen kẽ này nên phải tách riêng thành 1 hàm chuyên biệt, CHỈ kích hoạt
+      // khi phát hiện đúng dấu hiệu của mẫu này (không ảnh hưởng các mẫu hóa đơn khác).
+      function parseTinhChatTemplateBlocks(lines) {
+        let hoaLineCount = 0, hangMarkerCount = 0, dichVuMarkerCount = 0;
+        for (let l of lines) {
+          let t = l.trim();
+          if (/^\d{1,4}\s+hóa,\s*\S/i.test(t)) hoaLineCount++;
+          if (/^hàng$/i.test(t)) hangMarkerCount++;
+          if (/^dịch\s*vụ$/i.test(t)) dichVuMarkerCount++;
+        }
+        if (hoaLineCount < 1 || hangMarkerCount < 1 || dichVuMarkerCount < 1) return null;
+
+        // [v25] Mốc mở/đóng khối "Hàng" / "dịch vụ" đôi khi bị DÍNH LIỀN với mảnh tên hàng
+        // lân cận trên CÙNG 1 dòng vật lý (thường xảy ra ở hàng cuối trang, do PDF nén sát
+        // dòng hơn để vừa khít trang trước khi ngắt trang), ví dụ "Hàng Má phanh đĩa Wa
+        // S110," hay "dịch vụ - H01" thay vì đứng riêng 1 dòng như bình thường. Nếu chỉ so
+        // khớp CHÍNH XÁC dòng "Hàng"/"dịch vụ" (không cho phép chữ đi kèm), các mốc bị dính
+        // này sẽ không được nhận diện, khiến khối hàng tương ứng bị NUỐT MẤT hoàn toàn (rơi
+        // vào khoảng trống giữa 2 mốc thật của mặt hàng TRƯỚC và SAU nó). Ngoài ra, một số
+        // dòng hàng khuyến mại/tặng kèm 0đ lại dùng cặp mốc KHÁC hẳn - "Khuyến" / "mại" -
+        // thay vì "Hàng" / "dịch vụ" (cột Tính chất ghi "Khuyến mại" thay vì "Hàng hóa, dịch
+        // vụ"), cũng cần nhận diện riêng để không bỏ sót các dòng khuyến mại kiểu này.
+        let blocks = [];
+        let i = 0;
+        while (i < lines.length) {
+          let openMatch = lines[i].trim().match(/^(hàng|khuyến)\s*(.*)$/i);
+          if (!openMatch) { i++; continue; }
+          let openWord = openMatch[1].toLowerCase();
+          let leadingFrag = openMatch[2].trim();
+          let closeRe = openWord === 'khuyến' ? /^mại\s*(.*)$/i : /^dịch\s*vụ\s*(.*)$/i;
+
+          // [v33] Đôi khi PDF render LẶP ĐÔI y hệt chính mốc đóng khối ngay trên CÙNG 1 dòng vật
+          // lý, ví dụ dòng "dịch vụ dịch vụ" thay vì "dịch vụ" (lỗi hiển thị của MISA khi 1 hàng
+          // rơi đúng ranh giới ngắt trang/dòng, không phải nội dung tên hàng thật). Khi đó, phần
+          // "trailingFrag" bóc được sau mốc đóng chính là chữ "dịch vụ"/"mại" bị lặp lại nguyên
+          // văn - KHÔNG phải 1 mảnh tên hàng còn sót - nếu không loại bỏ, cụm rác này sẽ bị nối
+          // nhầm vào cuối Tên hàng của đúng dòng hàng hóa đó (VD "...Cụm Gương Phải dịch vụ").
+          // Nhận diện: trailingFrag (sau khi chuẩn hóa) trùng khớp lại chính closeRe (tức bản
+          // thân nó cũng là 1 mốc đóng/mở hợp lệ, không chứa nội dung nào khác) thì loại bỏ.
+          const DUP_MARKER_FRAG_RE = /^(hàng|khuyến|mại|hóa,?|dịch\s*vụ)$/i;
+
+          let start = i + 1;
+          let end = -1;
+          let trailingFrag = '';
+          for (let k = start; k < lines.length; k++) {
+            let cm = lines[k].trim().match(closeRe);
+            if (cm) {
+              end = k;
+              trailingFrag = cm[1].trim();
+              if (DUP_MARKER_FRAG_RE.test(trailingFrag)) trailingFrag = '';
+              break;
+            }
+          }
+          if (end === -1) break; // không tìm thấy mốc đóng khối tương ứng -> dừng, tránh sai lệch dữ liệu
+          if (DUP_MARKER_FRAG_RE.test(leadingFrag)) leadingFrag = '';
+          let bodyLines = lines.slice(start, end);
+          if (leadingFrag) bodyLines = [leadingFrag].concat(bodyLines);
+          if (trailingFrag) bodyLines = bodyLines.concat([trailingFrag]);
+
+          // Tìm dòng chứa STT + số liệu trong khối. Với tính chất "Hàng hóa, dịch vụ" dòng
+          // này có dạng "N hóa, ..."; với tính chất "Khuyến mại" thì KHÔNG có cụm "hóa," đi
+          // kèm (chỉ còn "N ..." thuần) - nên thử bỏ tiền tố "hóa," nếu có rồi mới bóc tách,
+          // để dùng chung 1 logic cho cả 2 loại tính chất.
+          let sttLineIdx = -1, sttNum = null, sttRestRaw = '';
+          for (let idx2 = 0; idx2 < bodyLines.length; idx2++) {
+            let m = bodyLines[idx2].trim().match(/^(\d{1,4})\s+(.*)$/);
+            if (!m) continue;
+            let rest = m[2].trim().replace(/^hóa,\s*/i, '');
+            if (extractDataTail(rest, true)) { sttLineIdx = idx2; sttNum = parseInt(m[1], 10); sttRestRaw = rest; break; }
+          }
+          if (sttLineIdx === -1) { i = end + 1; continue; } // khối không đúng dạng mong đợi, bỏ qua an toàn
+
+          let parsedTail = extractDataTail(sttRestRaw, true);
+
+          // Đơn giá = 0 ở dòng số liệu là dấu hiệu cột Đơn giá đã bị tách rời sang các dòng
+          // tên hàng lân cận (xem giải thích ở trên) - CHỈ khi đó mới đi tìm mảnh số bị tách
+          // trong các dòng còn lại; nếu không, mọi con số còn lại (VD "CTH 200") chắc chắn chỉ
+          // là 1 phần của tên hàng/model, không được hiểu nhầm thành mảnh giá.
+          let priceWasSplit = parsedTail.unitPrice === 0;
+
+          let nameAcc = '';
+          let priceFragments = [];
+          for (let idx = 0; idx < bodyLines.length; idx++) {
+            if (idx === sttLineIdx) {
+              if (parsedTail.namePart) nameAcc = joinFrag(nameAcc, parsedTail.namePart);
+              continue;
+            }
+            let t = bodyLines[idx].trim();
+            if (!t) continue;
+
+            if (priceWasSplit && /^[\d.,]+$/.test(t)) {
+              // Dòng CHỈ TOÀN chữ số/dấu chấm/phẩy (không lẫn chữ) -> chắc chắn là 1 mảnh giá.
+              priceFragments.push(t);
+              continue;
+            }
+            if (priceWasSplit) {
+              let mm = t.match(/^(.*\S)\s+([.,\d]+)$/);
+              if (mm && /\d/.test(mm[2])) {
+                nameAcc = joinFrag(nameAcc, mm[1]);
+                priceFragments.push(mm[2]);
+                continue;
+              }
+            }
+            nameAcc = joinFrag(nameAcc, t);
+          }
+
+          let finalUnitPrice = parsedTail.unitPrice;
+          if (priceFragments.length) {
+            let numStr = priceFragments.join('');
+            let cleaned = numStr.replace(/\./g, '').replace(',', '.');
+            let parsedPrice = parseFloat(cleaned);
+            if (!isNaN(parsedPrice)) finalUnitPrice = parsedPrice;
+          }
+
+          blocks.push({
+            stt: sttNum,
+            rawName: nameAcc,
+            unit: parsedTail.unit,
+            qty: parsedTail.qty,
+            price: finalUnitPrice,
+            vat: parsedTail.vatRate
+          });
+
+          i = end + 1;
+        }
+        return blocks.length ? blocks : null;
+      }
+
+      // --- [v34] BIẾN THỂ "LỎNG" CỦA MẪU CÓ CỘT "TÍNH CHẤT" (VD hóa đơn Công Ty TNHH Hòa
+      // Bình Minh, ký hiệu C26TBK) --- Khác với biến thể xử lý bởi parseTinhChatTemplateBlocks
+      // ở trên (mảnh "hóa," LUÔN dính liền với số STT + TOÀN BỘ số liệu trên CÙNG 1 dòng, dạng
+      // "1 hóa, Chiếc 2 ... 8%"), ở biến thể này PDF in RIÊNG BIỆT HOÀN TOÀN từng mảnh: số STT
+      // đứng 1 mình 1 dòng (VD "1"), rồi lần lượt "Hàng" / "hóa," / "dịch vụ" mỗi mảnh cũng 1
+      // dòng riêng - KHÔNG dòng nào trong số này mang theo bất kỳ số liệu nào cả. Toàn bộ số
+      // liệu (ĐVT/SL/Đơn giá/Thành tiền/Thuế suất) nằm HOÀN TOÀN trong các dòng theo SAU mốc
+      // đóng "dịch vụ", xen kẽ với các dòng tên hàng. Vì hàm ở trên bắt buộc phải tìm được 1
+      // dòng NGAY TRONG khối khớp mẫu "SỐ + hóa, + số liệu" nên luôn thất bại (trả về null) với
+      // kiểu này - cần 1 hàm chuyên biệt khác, nhận diện khối bằng cặp (dòng SỐ đứng ngay TRƯỚC
+      // "Hàng"/"Khuyến") thay vì tìm số liệu ngay trong khối. Toàn bộ nội dung còn lại của khối
+      // (tên hàng + số liệu xen kẽ) được gộp thành 1 chuỗi rồi bóc tách 1 lần bằng
+      // extractDataTail, giống hệt cách xử lý các mẫu 1-dòng-liền-mạch khác.
+      function parseTinhChatTemplateBlocksLoose(lines) {
+        let bareHoaCount = 0, hangCount = 0, dvCount = 0;
+        for (let l of lines) {
+          let t = l.trim();
+          if (/^hóa,?$/i.test(t)) bareHoaCount++;
+          if (/^hàng$/i.test(t)) hangCount++;
+          if (/^dịch\s*vụ$/i.test(t)) dvCount++;
+        }
+        if (bareHoaCount < 1 || hangCount < 1 || dvCount < 1) return null;
+
+        let blocks = [];
+        let i = 0;
+        while (i < lines.length) {
+          let openWordMatch = lines[i].trim().match(/^(hàng|khuyến)$/i);
+          if (!openWordMatch) { i++; continue; }
+          // Số STT phải đứng NGAY TRƯỚC mốc mở "Hàng"/"Khuyến", đứng 1 mình 1 dòng - nếu
+          // không, dòng "Hàng" này không thuộc mẫu đang xét, bỏ qua an toàn.
+          let sttMatch = i > 0 ? lines[i - 1].trim().match(/^(\d{1,4})$/) : null;
+          if (!sttMatch) { i++; continue; }
+          let openWord = openWordMatch[1].toLowerCase();
+          let closeRe = openWord === 'khuyến' ? /^mại$/i : /^dịch\s*vụ$/i;
+
+          // Ngay sau mốc mở phải là mảnh "hóa," đứng riêng (chỉ với tính chất "Hàng hóa, dịch
+          // vụ"; tính chất "Khuyến mại" không có mảnh này).
+          let afterOpen = i + 1;
+          if (openWord !== 'khuyến') {
+            if (!/^hóa,?$/i.test((lines[afterOpen] || '').trim())) { i++; continue; }
+            afterOpen++;
+          }
+          if (!closeRe.test((lines[afterOpen] || '').trim())) { i++; continue; }
+          let closeIdx = afterOpen;
+
+          // Khối kết thúc ngay TRƯỚC cặp (số đứng riêng + "Hàng"/"Khuyến") của mặt hàng kế
+          // tiếp, HOẶC ngay khi gặp 1 dòng rác biết trước (STOP_RE_PDF) - dòng hàng CUỐI CÙNG
+          // của bảng (không còn mặt hàng kế tiếp) sẽ luôn rơi vào trường hợp này, vì ngay sau
+          // nó là dòng mở đầu bảng "Tổng hợp" tổng kết thuế suất; các mặt hàng nằm ở RANH GIỚI
+          // TRANG cũng có thể rơi vào trường hợp này, vì PDF thường lặp lại 1 đoạn chân trang
+          // xác thực (VD "Mã CQT cấp:...", "Mẫu số:...", "Ký hiệu:...", "Số hóa đơn:...") ngay
+          // sau dòng hàng cuối của mỗi trang, trước khi sang mặt hàng đầu tiên của trang kế
+          // tiếp. Nếu không dừng đúng lúc ở cả 2 trường hợp trên, khối sẽ NUỐT LUÔN toàn bộ nội
+          // dung rác này (thậm chí nuốt luôn cả bảng tổng hợp cuối hóa đơn nếu đây là mặt hàng
+          // cuối cùng), làm bóc tách số liệu sai/thất bại hoàn toàn cho đúng mặt hàng đó.
+          let bodyStart = closeIdx + 1;
+          let bodyEnd = lines.length;
+          for (let k = bodyStart; k < lines.length; k++) {
+            let lk = lines[k].trim();
+            if (STOP_RE_PDF.test(lk)) { bodyEnd = k; break; }
+            if (k < lines.length - 1 && /^\d{1,4}$/.test(lk) && /^(hàng|khuyến)$/i.test(lines[k + 1].trim())) {
+              bodyEnd = k;
+              break;
+            }
+          }
+
+          let bodyLines = lines.slice(bodyStart, bodyEnd).map(s => s.trim()).filter(Boolean);
+          let parsed = extractDataTail(bodyLines.join(' '), true);
+          if (parsed) {
+            blocks.push({
+              stt: parseInt(sttMatch[1], 10),
+              rawName: parsed.namePart,
+              unit: parsed.unit,
+              qty: parsed.qty,
+              price: parsed.unitPrice,
+              vat: parsed.vatRate
+            });
+          }
+          i = bodyEnd;
+        }
+        return blocks.length ? blocks : null;
+      }
+
+      let itemBlocks = parseTinhChatTemplateBlocks(rawLines);
+      if (!itemBlocks) itemBlocks = parseTinhChatTemplateBlocksLoose(rawLines);
+      if (!itemBlocks) {
+      itemBlocks = [];
+      let currBlock = null;
+      // Chỉ bắt đầu gom "khối chờ" (dòng mồ côi không có STT) SAU KHI đã thấy dòng tiêu đề
+      // bảng (bắt đầu bằng "STT"). Trước đó là các dòng thông tin công ty/người mua/địa chỉ
+      // v.v. bị ngắt dòng (VD "Đơn vị Thuế suất" / "tính GTGT" do 2 cột "Đơn vị tính" và
+      // "Thuế suất GTGT" đều có tiêu đề 2 dòng) - nếu không chặn, các mảnh này sẽ bị lẫn vào
+      // làm "tên hàng" của dòng hàng hóa ĐẦU TIÊN trong bảng, gây sai ngay từ STT=1.
+      let tableStarted = false;
+      // Một số cột tiêu đề bảng bị chia 2 dòng do tên cột dài (VD "Đơn vị/tính", "Thuế
+      // suất/GTGT"): dòng ĐẦU của các cột này in TRƯỚC dòng "STT Tên hàng hóa...", còn dòng
+      // SAU lại in NGAY SAU dòng "STT..." đó (do canh giữa dòng tiêu đề 2 tầng). Cần bỏ qua
+      // luôn dòng ngay sau dòng "STT..." này, nếu không nó sẽ bị lẫn vào làm tên hàng của
+      // dòng hàng hóa ĐẦU TIÊN trong bảng (VD "tính GTGT Cần số 2ND" thay vì "Cần số 2ND").
+      let skipNextAfterHeader = false;
+
+      function isContinuationTail(block) {
+        if (!block) return false;
+        let t = block.lastFragment || '';
+        return t.endsWith('-') || t.endsWith('(') || (t.split('(').length > t.split(')').length);
+      }
+
+      function makePendingBlock(firstLine) {
+        return { stt: null, text: firstLine, lastFragment: firstLine, fragCount: 0, dataFound: false,
+                 namePart: '', unit: '', qty: 0, unitPrice: 0, amt: 0, vatRate: '', suffixParts: [],
+                 multiFrag: false, expectedSuffixCount: 0 };
+      }
+
+      function finalizeBlock() {
+        if (!currBlock) { currBlock = null; return; }
+        if (currBlock.dataFound && (currBlock.stt !== null || currBlock.noSttAdjustment)) {
+          let fullName = currBlock.namePart;
+          if (currBlock.suffixParts.length) fullName = joinFrag(fullName, currBlock.suffixParts.join(' '));
+          itemBlocks.push({
+            stt: currBlock.stt,
+            rawName: fullName,
+            unit: currBlock.unit,
+            qty: currBlock.qty,
+            price: currBlock.unitPrice,
+            vat: currBlock.vatRate
+          });
+        }
+        currBlock = null;
+      }
+
+      for (let line of rawLines) {
+        let lineClean = stripTrailingPageMarker(line)
+                            .replace(/\s+tiep theo trang.*$/i, '')
+                            .trim();
+        if (!lineClean) continue;
+
+        if (skipNextAfterHeader) {
+          skipNextAfterHeader = false;
+          // Chỉ thực sự bỏ qua nếu dòng này KHÔNG bắt đầu bằng số (tức không phải luôn là
+          // dòng hàng hóa STT=1) - phòng trường hợp mẫu hóa đơn khác không có tiêu đề chia 2
+          // tầng, để tránh lỡ bỏ mất luôn dòng hàng hóa đầu tiên.
+          if (!/^\d{1,4}\s/.test(lineClean) && !/^\d{1,4}$/.test(lineClean)) continue;
+        }
+        if (/^STT(\s|:|$)/i.test(lineClean)) {
+          tableStarted = true;
+          // Chỉ có nguy cơ tiêu đề bị chia 2 tầng (cần bỏ qua dòng NGAY SAU) khi chính dòng
+          // "STT..." này CHƯA thấy đủ cụm "Đơn vị tính" ngay trong nó (bị tách sang dòng
+          // riêng do tên cột dài, kiểu Mô Tô Siêu Việt). Nếu dòng "STT..." đã có sẵn trọn vẹn
+          // "Đơn vị tính" (kiểu Mai Thảo - tiêu đề chỉ 1 tầng, không bị chia dòng), thì dòng
+          // theo sau chắc chắn là tên hàng thật của mặt hàng đầu tiên - KHÔNG được bỏ qua,
+          // nếu không sẽ mất mất luôn dòng hàng hóa đầu tiên của mọi hóa đơn dùng mẫu này.
+          if (!/đơn\s*vị/i.test(lineClean)) skipNextAfterHeader = true;
+        }
+        if (STOP_RE_PDF.test(lineClean)) { finalizeBlock(); continue; }
+        if (HEADER_FRAG_RE_PDF.test(lineClean)) { finalizeBlock(); continue; }
+        if (isHeaderVocabOnlyLine(lineClean)) { finalizeBlock(); continue; }
+        if (/6=4x5/i.test(lineClean) || /^1\s+2\s+3\s+4\s+5/i.test(lineClean)) { finalizeBlock(); continue; }
+
+        let isContinuation = isContinuationTail(currBlock);
+
+        let sttMatch = lineClean.match(/^(\d{1,4})\s+([^\s\)].*)/);
+        let bareSttMatch = !sttMatch && lineClean.match(/^(\d{1,4})$/);
+
+        // [NCC: Siêu Việt Mô Tô - mã hàng bị ngắt dòng ngay TRONG phần "đuôi" đang chờ nhận,
+        // với đúng phần còn lại của mã LẠI TOÀN LÀ CHỮ SỐ, ví dụ mã "(93903-35380-0009)" bị
+        // ngắt thành "...35380-" + "0009" (dòng "đuôi" chỉ vỏn vẹn "0009")] Khi khối đang ở
+        // giai đoạn "chờ nhận đủ N dòng đuôi đã biết trước" (dataFound=true, multiFrag=true),
+        // một dòng CHỈ TOÀN CHỮ SỐ tuyệt đối KHÔNG được hiểu nhầm thành 1 STT mới - vì ta đã
+        // biết chính xác cần nhận thêm bao nhiêu dòng đuôi, nên luôn ưu tiên coi đó là 1 mảnh
+        // dữ liệu (mã hàng/ghi chú) cần gộp vào đuôi, không phải mở hàng hóa mới.
+        if (bareSttMatch && currBlock && currBlock.dataFound && currBlock.multiFrag) {
+          bareSttMatch = false;
+        }
+
+        // [v19 - Mở rộng quy tắc trên cho CẢ sttMatch] Trường hợp phần "đuôi" tên hàng dài
+        // bị ngắt dòng NGAY TẠI 1 con số thuộc thông số kỹ thuật, ví dụ tên "...80/90-14
+        // MA3D" bị tách thành "...80/90-" (dòng đầu) + "14 MA3D" (dòng đuôi) - dòng đuôi
+        // "14 MA3D" trông y hệt 1 dòng "STT + tên hàng mới" hợp lệ (số ở đầu + có chữ theo
+        // sau). Khi khối đang ở giai đoạn "chờ nhận đủ N dòng đuôi đã biết trước" (dataFound
+        // =true, multiFrag=true, CHƯA nhận đủ expectedSuffixCount dòng đuôi), TUYỆT ĐỐI ưu
+        // tiên coi dòng này là 1 mảnh của đuôi tên hàng đang dở, không phải STT mới - vì ta
+        // đã biết chính xác cần nhận thêm bao nhiêu dòng đuôi. Nếu không chặn, khối đang mở
+        // bị đóng sớm (mất phần đuôi tên) và khối STT thật ngay sau đó cũng bị hủy do chưa
+        // kịp có tên hàng (dataFound=false khi gặp STT tiếp theo).
+        if (sttMatch && currBlock && currBlock.dataFound && currBlock.multiFrag &&
+            currBlock.expectedSuffixCount && currBlock.suffixParts.length < currBlock.expectedSuffixCount) {
+          sttMatch = null;
+        }
+
+        // [NCC: Siêu Việt Mô Tô - mã hàng ngắt dòng ngay TRƯỚC dòng STT+số liệu, ví dụ
+        // "(90107-KAN-" rồi mới tới "5 Chiếc 200 1.020 204.000 8% 16.320"] Nếu phần text
+        // NGAY SAU số đứng đầu dòng rõ ràng là 1 dòng số liệu hợp lệ (ĐVT+SL+Đơn giá+Thành
+        // tiền) - dù bản thân nó KHÔNG còn phần tên hàng nào kèm theo (allowEmptyName=true,
+        // vì tên hàng đã nằm hết ở khối đang chờ phía trước) - thì CHẮC CHẮN đây là dòng
+        // STT+số liệu thật, bất kể mảnh text trước đó có đang kết thúc bằng "-"/"(" hay
+        // không. Chỉ áp dụng quy tắc "isContinuation" (coi số đầu dòng là 1 phần của MÃ bị
+        // ngắt, không phải STT) khi KHÔNG có bằng chứng số liệu rõ ràng như vậy đi kèm.
+        if (sttMatch && isContinuation && extractDataTail(sttMatch[2].trim(), true)) {
+          isContinuation = false;
+        }
+
+        if ((sttMatch || bareSttMatch) && !isContinuation) {
+          let m = sttMatch || bareSttMatch;
+          let potStt = parseInt(m[1], 10);
+          let rest = sttMatch ? sttMatch[2].trim() : '';
+          let looksLikeAddress = rest ? /phường|quận|huyện|tỉnh|thành phố|việt nam|khóm|(?:^|\s)ấp(?=\s|$)|đường\s*số|ngõ|ngách/i.test(rest) : false;
+          // [v26] Cờ "rest bắt đầu bằng mã-kiểu-ghép-trong-ngoặc" (VD "2019)") vốn dùng để
+          // chặn nhầm STT khi đây thực chất là 1 mảnh MÃ HÀNG bị ngắt dòng dở dang (không có
+          // số liệu thật đi kèm). Nhưng nếu rest đã CÓ ĐỦ số liệu hợp lệ theo sau (ĐVT/SL/Đơn
+          // giá/Thành tiền/...), thì chắc chắn đây LÀ dòng STT thật (tên hàng chỉ tình cờ có
+          // dạng "...(2017-" bị ngắt ngay trước 1 cụm số như "2019)"), không phải mã ghép dở
+          // dang - phải bỏ qua cờ chặn này để không làm mất số STT thật + nuốt nhầm số "1"
+          // vào tên hàng.
+          let hasRealTrailingData = rest ? !!extractDataTail(rest, true) : false;
+          let validSttLine = !looksLikeAddress && (hasRealTrailingData || !/^[A-Za-z0-9\-]+\)/.test(rest)) && potStt >= 1 && potStt <= 5000 && !/^(NĂM|THÁNG|NGÀY|202\d|199\d|1800\.|0251|0296|0303|1600)/i.test(lineClean);
+
+          if (validSttLine) {
+            if (currBlock && currBlock.stt === null && !currBlock.dataFound) {
+              // Khối đang "chờ" (đã tích lũy ≥1 dòng mảnh tên hàng mồ côi phía trước) -> STT
+              // này chính là STT của khối đó, ghép nốt phần còn lại của dòng vào.
+              currBlock.stt = potStt;
+              // Lưu ý: nối phần "rest" (đoạn số liệu ĐVT/SL/Giá/Tiền) vào tên hàng đang dở
+              // dang LUÔN bằng khoảng trắng thường, KHÔNG dùng joinFrag (vốn nối liền không
+              // dấu cách khi text trước kết thúc bằng "-"/"(" - quy tắc đó chỉ dành cho nối
+              // 2 mảnh MÃ HÀNG bị ngắt dòng, ví dụ "(90107-KAN-" + "900-209)", không áp dụng
+              // khi mảnh phía sau là cột số liệu như "Chiếc 200 1.020 204.000 8% 16.320").
+              let merged = rest ? (currBlock.text + ' ' + rest) : currBlock.text;
+              currBlock.text = merged;
+              if (rest) currBlock.lastFragment = rest;
+              let parsed = extractDataTail(merged);
+              if (parsed) {
+                currBlock.dataFound = true;
+                currBlock.namePart = parsed.namePart;
+                currBlock.unit = parsed.unit; currBlock.qty = parsed.qty;
+                currBlock.unitPrice = parsed.unitPrice; currBlock.amt = parsed.amt; currBlock.vatRate = parsed.vatRate;
+                // Khối này XUẤT PHÁT từ 1 khối "chờ" (có ≥1 dòng mồ côi phía trước, kể cả
+                // khi chỉ đúng 1 dòng - tên hàng ngắt vỏn vẹn 2 dòng) -> LUÔN cần nhận thêm
+                // phần "đuôi" (do MISA canh GIỮA cột số liệu so với ô tên hàng nhiều dòng,
+                // hễ có phần đầu thì luôn có phần đuôi tương ứng phía sau).
+                currBlock.multiFrag = true;
+                // Số dòng "đuôi" cần nhận thêm luôn BẰNG số dòng "đầu" đã gộp trước đó
+                // (fragCount+1, vì dòng khởi tạo khối "chờ" không được tính vào fragCount).
+                currBlock.expectedSuffixCount = currBlock.fragCount + 1;
+              }
+              continue;
+            }
+
+            // Phòng hờ: nếu khối cũ vì lý do gì đó vẫn còn mở tại đây, đóng lại trước khi mở khối mới.
+            finalizeBlock();
+
+            currBlock = { stt: potStt, text: rest, lastFragment: rest, fragCount: 0, dataFound: false,
+                          namePart: '', unit: '', qty: 0, unitPrice: 0, amt: 0, vatRate: '', suffixParts: [],
+                          multiFrag: false, expectedSuffixCount: 0 };
+            let parsed = extractDataTail(rest);
+            if (parsed) {
+              currBlock.dataFound = true;
+              currBlock.namePart = parsed.namePart;
+              currBlock.unit = parsed.unit; currBlock.qty = parsed.qty;
+              currBlock.unitPrice = parsed.unitPrice; currBlock.amt = parsed.amt; currBlock.vatRate = parsed.vatRate;
+              currBlock.multiFrag = false; // có đủ số liệu ngay trên chính dòng STT -> tên hàng 1 dòng
+              finalizeBlock();
+            }
+            continue;
+          }
+        }
+
+        // Dòng KHÔNG có STT hợp lệ ở đầu - chỉ là mảnh tên hàng (mồ côi hoặc phần đuôi).
+        // Bỏ qua hoàn toàn nếu CHƯA vào tới bảng hàng hóa (còn đang ở phần thông tin đầu hóa đơn).
+        if (!tableStarted) continue;
+
+        if (!currBlock) {
+          // Chưa có khối nào đang mở -> mở khối "chờ" mới (chưa biết STT), tích lũy làm phần
+          // ĐẦU tên hàng, chờ dòng có STT phía sau ghép nốt.
+          currBlock = makePendingBlock(lineClean);
+          continue;
+        }
+
+        if (!currBlock.dataFound) {
+          // [v24 - Dòng điều chỉnh/chiết khấu tổng KHÔNG có số STT riêng, VD "TORA ASIA":
+          // "Chiết khấu doanh số quý 01/2025" được in tách tên ra 1 dòng mồ côi, rồi TOÀN
+          // BỘ số liệu (SL/Đơn giá/Thành tiền/Thuế suất/Tiền thuế/Thành tiền sau thuế) nằm
+          // trọn trên 1 dòng riêng tiếp theo, không có số STT dẫn đầu nào cả (khác hẳn các
+          // dòng hàng hóa thường luôn có STT đi kèm số liệu). Nếu không nhận diện riêng,
+          // dòng số liệu này bị hiểu nhầm là thêm 1 mảnh tên mồ côi, khiến khối "chờ" không
+          // bao giờ đóng được (không có STT để kích hoạt), làm RỚT MẤT hẳn dòng điều chỉnh
+          // này khỏi kết quả - sai lệch Tổng cộng tiền hàng khi đối chiếu. Nhận diện: bản
+          // thân dòng NÀY (không cần ghép thêm gì) đã đủ số liệu hợp lệ để tự bóc tách được
+          // (tên hàng rỗng cho phép), tức đây chắc chắn là 1 dòng số liệu thuần, không phải
+          // mảnh tên hàng.
+          let selfParsed = extractDataTail(lineClean, true);
+          if (selfParsed) {
+            currBlock.dataFound = true;
+            currBlock.namePart = joinFrag(currBlock.text, selfParsed.namePart);
+            currBlock.unit = selfParsed.unit; currBlock.qty = selfParsed.qty;
+            currBlock.unitPrice = selfParsed.unitPrice; currBlock.amt = selfParsed.amt; currBlock.vatRate = selfParsed.vatRate;
+            currBlock.multiFrag = true;
+            currBlock.expectedSuffixCount = currBlock.fragCount + 1;
+            currBlock.noSttAdjustment = true;
+            continue;
+          }
+          currBlock.text = joinFrag(currBlock.text, lineClean);
+          currBlock.lastFragment = lineClean;
+          currBlock.fragCount++;
+          continue;
+        }
+
+        if (currBlock.multiFrag) {
+          // Khối đã có đủ số liệu VÀ được ghép từ nhiều mảnh -> dòng này là phần ĐUÔI của
+          // tên hàng dài, gộp tiếp vào suffix (không đóng khối ngay).
+          currBlock.suffixParts.push(lineClean);
+          currBlock.lastFragment = lineClean;
+          // Đã nhận đủ số dòng đuôi theo dự kiến -> đóng khối NGAY, để các dòng mồ côi kế
+          // tiếp (thực chất là phần ĐẦU tên hàng của mặt hàng SAU) không bị nuốt nhầm vào đây.
+          if (currBlock.expectedSuffixCount && currBlock.suffixParts.length >= currBlock.expectedSuffixCount) {
+            finalizeBlock();
+          }
+          continue;
+        }
+
+        // (dataFound=true, multiFrag=false) lẽ ra đã được đóng ngay - phòng hờ: đóng khối
+        // cũ rồi coi dòng hiện tại là khởi đầu 1 khối "chờ" mới.
+        finalizeBlock();
+        currBlock = makePendingBlock(lineClean);
+      }
+      finalizeBlock();
+      } // đóng khối "if (!itemBlocks)" - kết thúc nhánh bóc tách tổng quát (mẫu 1-dòng-liền-mạch)
+
+      // Làm sạch & chuẩn hóa từng dòng hàng hóa đã gom được ở trên (số liệu đã được tách
+      // sẵn ngay trong lúc gom khối ở trên, ở đây chỉ cần xử lý phần TÊN HÀNG).
+      for (let block of itemBlocks) {
+        let text = stripTrailingPageMarker(block.rawName).trim();
+        // Một số mẫu hóa đơn MISA (VD hóa đơn theo Mẫu số 1, NCC Siêu Việt Mô Tô) có thêm cột
+        // "Tính chất" đứng ngay trước cột "Tên hàng hóa, dịch vụ", với giá trị luôn lặp lại là
+        // "Hàng hóa, dịch vụ" cho mọi dòng. Cột này bị gộp chung vào đầu Tên hàng khi bóc tách,
+        // khiến MỌI dòng hàng trong các hóa đơn dùng mẫu này đều bị dính thêm cụm từ vô nghĩa
+        // "Hàng hóa, dịch vụ" ở đầu tên - làm sai lệch toàn bộ tên hàng khi đối chiếu với MISA.
+        text = text.replace(/^hàng\s*hóa,?\s*dịch\s*vụ\s*/i, '').trim();
+        text = text.replace(/\(\s*([A-Za-z0-9]+)\s*-\s*([A-Za-z0-9]+)\s*\)/g, '($1-$2)');
+        text = text.replace(/([A-Za-z0-9]+)-\s+([A-Za-z0-9]+)/gi, '$1-$2');
+        if (!text) continue;
+
+        let splitRes = splitPartCodeAndName(text);
+
+        allParsedItems.push({
+          page: p,
+          stt: block.stt,
+          rawName: text,
+          invCode: splitRes.code,
+          invName: splitRes.name,
+          unit: block.unit || 'Chiếc',
+          qty: block.qty || 1,
+          price: block.price || 0,
+          vat: block.vat,
+          invBrand: detectBrandKeyword(text) // dự phòng theo từng dòng, ưu tiên NCC chung của cả hóa đơn khi khớp
+        });
+      }
+    }
+
+    // Với các hóa đơn khai thuế suất GTGT CHUNG một lần ở cuối (không có %/dòng, thường
+    // gặp ở Suzuki, SYM...), tìm dòng "Thuế suất GTGT (VAT rate): 8%" / "Thuế suất: 8%"
+    // và áp dụng cho MỌI dòng hàng chưa tự bắt được VAT riêng, để cột VAT HĐ luôn hiển
+    // thị số % thay vì để trống.
+    let hasAnyRowVat = allParsedItems.some(it => it.vat);
+    if (!hasAnyRowVat) {
+      let mGlobalVat = fullDocText.match(/thu[êế]\s*su[âấ]t(?:\s*gtgt)?[^%\d]{0,25}(\d+(?:[.,]\d+)?)\s*%/i);
+      if (mGlobalVat) {
+        let globalVat = normalizeVatValue(mGlobalVat[1] + '%');
+        for (let it of allParsedItems) {
+          if (!it.vat) it.vat = globalVat;
+        }
+      }
+    }
+
+    // Dò NCC/hãng từ toàn bộ nội dung PDF (nếu tên file chưa dò ra hãng). Tên công ty bán hàng
+    // thường nằm ở đầu trang 1, ví dụ "CÔNG TY TNHH MTV HONDA VIỆT NAM" hay "CN SUZUKI...".
+    if (!currentInvoiceSupplierBrand) {
+      currentInvoiceSupplierBrand = detectBrandKeyword(fullDocText);
+    }
+    // Dò xem tên công ty bán hàng trên hóa đơn có trùng với 1 tag "Kho ngầm định" (NCC) nào
+    // đã có sẵn trong danh mục MISA hay không (VD: "MAI THAO"), để ưu tiên khớp đúng NCC đó.
+    if (!currentInvoiceWarehouseTag) {
+      currentInvoiceWarehouseTag = detectKnownWarehouseTag(fullDocText);
+    }
+
+    return allParsedItems;
+  }
+
+  async function parseExcelInvoice(file) {
+    const arrayBuffer = await readAsArrayBufferAsync(file);
+    const wb = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+    
+    let headerIdx = rawRows.findIndex(r => r && r.some(c => /tên|mặt hàng/i.test(String(c))) && r.some(c => /đơn giá|giá/i.test(String(c))));
+    if (headerIdx === -1) headerIdx = 0;
+    
+    const headers = (rawRows[headerIdx] || []).map(h => String(h || '').trim());
+    const nameIdx = headers.findIndex(h => /tên/i.test(h));
+    const codeIdx = headers.findIndex(h => /^mã/i.test(h));
+    const priceIdx = headers.findIndex(h => /đơn giá|giá/i.test(h));
+    const qtyIdx = headers.findIndex(h => /số lượng|sl/i.test(h));
+    const unitIdx = headers.findIndex(h => /đơn vị|dvt/i.test(h));
+    // Chỉ nhận cột thực sự là "Thuế suất" hoặc chữ "VAT" đứng riêng, KHÔNG nhận nhầm
+    // các cột như "Thành tiền trước thuế" (chỉ chứa chữ "thuế" đơn lẻ, không phải % thuế).
+    const vatIdx = headers.findIndex(h => /thu[êeế]\s*su[âaấ]t|\bvat\b/i.test(h));
+    // Cột NCC/hãng (nếu file có sẵn), VD: "NCC", "Nhà cung cấp", "Hãng", "Nhãn hiệu"
+    const nccIdx = headers.findIndex(h => /ncc|nhà cung cấp|nha cung cap|hãng|nhãn hiệu/i.test(h));
+
+    // Nếu chưa dò được hãng chung của cả file từ tên file, thử dò từ tên sheet
+    if (!currentInvoiceSupplierBrand) {
+      currentInvoiceSupplierBrand = detectBrandKeyword(wb.SheetNames[0]);
+    }
+    // Dò tên NCC (tên công ty bán hàng) từ khối văn bản đầu file (các dòng trước header STT),
+    // nơi thường chứa "ĐƠN VỊ BÁN HÀNG (SELLER): CÔNG TY TNHH ... MAI THẢO" — so khớp với
+    // danh sách "Kho ngầm định" đã biết trong danh mục MISA để ưu tiên đúng NCC.
+    if (!currentInvoiceWarehouseTag) {
+      let headerBlockText = rawRows.slice(0, headerIdx).flat().filter(Boolean).join(' ');
+      currentInvoiceWarehouseTag = detectKnownWarehouseTag(headerBlockText) || detectKnownWarehouseTag(wb.SheetNames[0]);
+    }
+
+    const parsed = [];
+    for (let i = headerIdx + 1; i < rawRows.length; i++) {
+      const r = rawRows[i];
+      if (!r || !r[nameIdx]) continue;
+      let rawName = String(r[nameIdx]).trim();
+      let explicitCode = codeIdx !== -1 ? String(r[codeIdx] || '').trim() : '';
+      let splitRes = splitPartCodeAndName(rawName);
+      let finalCode = explicitCode || splitRes.code;
+
+      // NCC riêng của từng dòng (ưu tiên cột NCC nếu có, sau đó dò trong chính tên hàng
+      // của dòng đó) - vì 1 file Excel toa/hóa đơn có thể gộp nhiều hãng khác nhau.
+      let rowBrand = nccIdx !== -1 ? detectBrandKeyword(String(r[nccIdx] || '')) : '';
+      if (!rowBrand) rowBrand = detectBrandKeyword(rawName);
+
+      parsed.push({
+        stt: parsed.length + 1,
+        rawName: rawName,
+        invCode: finalCode,
+        invName: splitRes.name,
+        unit: unitIdx !== -1 ? String(r[unitIdx] || '') : '',
+        qty: qtyIdx !== -1 ? Number(r[qtyIdx]) || 1 : 1,
+        price: priceIdx !== -1 ? Number(r[priceIdx]) || 0 : 0,
+        vat: vatIdx !== -1 ? normalizeVatValue(r[vatIdx]) : '',
+        invBrand: rowBrand
+      });
+    }
+    return parsed;
+  }
+
+  // --- 5. SO KHỚP THÔNG MINH VỚI KHO MISA (ƯU TIÊN MÃ -> XÉT TỚI TÊN & GIÁ) ---
+  // Các dòng ghi chú KHUYẾN MÃI / CHIẾT KHẤU trên hóa đơn (VD: "CTKM mua từ 50 vỏ Michelin -
+  // CK trực tiếp 2% trên đơn giá") không phải là một mặt hàng thật trong kho, nên KHÔNG được
+  // phép cố khớp bừa sang 1 mã bất kỳ (như "COMBO 1") - phải luôn trả về null cho các dòng này.
+  const PROMO_NOTE_RE = /ctkm|ch(ư|u)[oơ]ng\s*tr[ìi]nh\s*khuy[eế]n\s*m[aã]i|khuy[eế]n\s*m[aã]i|chi[eế]t\s*kh[aấ]u|ck\s*tr[uự]c\s*ti[eế]p|gi[aả]m\s*gi[aá]\s*(tr[uự]c\s*ti[eế]p|\d)/i;
+
+  function isPromoNoteLine(text) {
+    return PROMO_NOTE_RE.test(String(text || ''));
+  }
+
+  // invBrandHint: NCC/hãng dò riêng cho dòng hàng này (nếu có). Nếu bỏ trống, hàm sẽ tự
+  // dùng NCC chung của cả hóa đơn (currentInvoiceSupplierBrand), rồi mới dự phòng dò trong rawName.
+  function matchMisaItem(invCode, invName, rawName, invPrice, invBrandHint) {
+    if (!masterCatalog || masterCatalog.length === 0) return null;
+
+    // Chặn sớm: dòng khuyến mãi/chiết khấu không phải hàng hóa thật -> không đối chiếu
+    if (isPromoNoteLine(rawName) || isPromoNoteLine(invName)) return null;
+    
+    let cleanInvCode = cleanCode(invCode);
+    let cleanRawCode = cleanCode(rawName);
+    let normInvName = normalizeText(invName);
+    let normRawName = normalizeText(rawName);
+    let targetPrice = parseFloat(invPrice) || 0;
+
+    // NCC/hãng của dòng hàng đang xét: ưu tiên gợi ý riêng dòng -> NCC chung hóa đơn -> dò lại từ tên hàng
+    let invBrand = invBrandHint || currentInvoiceSupplierBrand || detectBrandKeyword(rawName) || detectBrandKeyword(invName);
+
+    // Hàm phụ: xác định hãng của 1 mặt hàng trong kho MISA (dò trong Tên hàng + Diễn giải + Mã)
+    const itemBrandOf = (item) => detectBrandKeyword((item.name || '') + ' ' + (item.desc || '') + ' ' + (item.code || ''));
+
+    // 1. Ưu tiên 1: Khớp theo Mã Hàng MISA
+    if (cleanInvCode && cleanInvCode.length >= 4) {
+      let exactCodes = masterCatalog.filter(item => cleanCode(item.code) === cleanInvCode);
+
+      if (exactCodes.length === 1) return exactCodes[0];
+      if (exactCodes.length > 1) {
+        // Nhiều mã trùng nhau (hiếm): ưu tiên đúng NCC trước, rồi mới tới giá gần nhất
+        exactCodes.sort((a, b) => {
+          if (invBrand) {
+            let aB = itemBrandOf(a) === invBrand ? 1 : 0;
+            let bB = itemBrandOf(b) === invBrand ? 1 : 0;
+            if (aB !== bB) return bB - aB;
+          }
+          return Math.abs((Number(a.buyPrice) || 0) - targetPrice) - Math.abs((Number(b.buyPrice) || 0) - targetPrice);
+        });
+        return exactCodes[0];
+      }
+    }
+
+    // 2. Ưu tiên 2: Mã HĐ nằm trong cột Diễn giải hoặc Tên hàng kho MISA
+    if (cleanInvCode && cleanInvCode.length >= 5) {
+      let descMatches = masterCatalog.filter(item => 
+        cleanCode(item.desc).includes(cleanInvCode) || cleanCode(item.name).includes(cleanInvCode)
+      );
+      if (descMatches.length > 0) {
+        // Cùng NCC được ưu tiên trước, sau đó mới xét giá gần nhất
+        descMatches.sort((a, b) => {
+          if (invBrand) {
+            let aB = itemBrandOf(a) === invBrand ? 1 : 0;
+            let bB = itemBrandOf(b) === invBrand ? 1 : 0;
+            if (aB !== bB) return bB - aB;
+          }
+          return Math.abs((Number(a.buyPrice) || 0) - targetPrice) - Math.abs((Number(b.buyPrice) || 0) - targetPrice);
+        });
+        return descMatches[0];
+      }
+    }
+
+    // 3. Ưu tiên 3: NCC (nếu dò được) -> Tên hàng gần đúng -> Giá gần nhất
+    let invKeywords = normInvName.split(/\s+/).filter(w => w.length >= 2);
+    if (invKeywords.length === 0 && normRawName) {
+      invKeywords = normRawName.split(/\s+/).filter(w => w.length >= 2);
+    }
+
+    let candidates = [];
+
+    for (let item of masterCatalog) {
+      let normItemName = normalizeText(item.name);
+      let normItemDesc = normalizeText(item.desc);
+      let itemPrice = Number(item.buyPrice) || 0;
+
+      let nameScore = 0;
+
+      if (normItemName === normInvName && normInvName.length > 0) {
+        nameScore = 1000;
+      } else if (normItemDesc === normInvName && normInvName.length > 0) {
+        nameScore = 900;
+      } else if (normItemDesc === normRawName && normRawName.length > 0) {
+        nameScore = 850;
+      } else if (normInvName.length >= 4 && (normItemName.includes(normInvName) || normInvName.includes(normItemName))) {
+        nameScore = 700;
+      } else if (normInvName.length >= 4 && (normItemDesc.includes(normInvName) || normInvName.includes(normItemDesc))) {
+        nameScore = 600;
+      } else if (invKeywords.length >= 2) {
+        let targetText = normItemName + ' ' + normItemDesc;
+        let matchCount = 0;
+        for (let kw of invKeywords) {
+          if (targetText.includes(kw)) matchCount++;
+        }
+        // Yêu cầu khớp ít nhất 2 từ khóa VÀ tỉ lệ trùng đủ lớn (>=34%) - tránh trường hợp
+        // 1 dòng ghi chú dài (VD khuyến mãi/chiết khấu) chỉ trùng ngẫu nhiên 2/12 từ với
+        // tên 1 mặt hàng bất kỳ trong kho rồi vẫn bị coi là "khớp".
+        let matchRatio = matchCount / invKeywords.length;
+        if (matchCount >= 2 && matchRatio >= 0.34) {
+          nameScore = matchRatio * 500;
+        }
+      }
+
+      if (nameScore > 0) {
+        let priceDiff = Math.abs(itemPrice - targetPrice);
+        let maxP = Math.max(itemPrice, targetPrice);
+        let priceRatio = maxP > 0 ? (priceDiff / maxP) : 0;
+
+        let priceScore = 0;
+        if (targetPrice > 0 && itemPrice > 0) {
+          if (priceDiff < 1) priceScore = 500;
+          else if (priceRatio <= 0.05) priceScore = 350;
+          else if (priceRatio <= 0.15) priceScore = 200;
+          else if (priceRatio <= 0.30) priceScore = 100;
+        }
+
+        // Điểm NCC theo "Kho ngầm định": ưu tiên mặt hàng thuộc đúng NCC ghi trên hóa đơn
+        // (VD: hóa đơn của "MAI THẢO" thì ưu tiên các mã có Kho ngầm định = "MAI THAO").
+        // Không phạt điểm khi item không có tag Kho ngầm định hoặc tag khác NCC — chỉ CỘNG
+        // điểm thưởng khi khớp đúng, để tránh loại oan các mặt hàng chưa được gắn tag NCC.
+        let warehouseScore = 0;
+        if (currentInvoiceWarehouseTag && item.warehouse &&
+            removeVietnameseTones(item.warehouse).toLowerCase().trim() === removeVietnameseTones(currentInvoiceWarehouseTag).toLowerCase().trim()) {
+          warehouseScore = 4000;
+        }
+
+        // Điểm NCC: đặt cao hơn hẳn điểm tên + giá cộng lại, để NCC luôn là điều kiện
+        // quyết định trước tiên (đúng hãng nhưng tên/giá kém khớp hơn vẫn được ưu tiên
+        // hơn sai hãng dù tên/giá khớp gần đúng) - khắc phục lỗi khớp nhầm như "Bugi NGK"
+        // bị gán sang mặt hàng của hãng "SYM" trong ảnh minh họa.
+        let brandScore = 0;
+        if (invBrand) {
+          let itemBrand = itemBrandOf(item);
+          if (itemBrand && itemBrand === invBrand) brandScore = 5000;
+          else if (itemBrand && itemBrand !== invBrand) brandScore = -3000; // sai hãng: đẩy xuống cuối
+          // itemBrand rỗng (không dò được hãng trong kho): giữ nguyên, không cộng/trừ
+        }
+
+        candidates.push({
+          item: item,
+          totalScore: brandScore + warehouseScore + nameScore + priceScore,
+          nameScore: nameScore,
+          priceDiff: priceDiff
+        });
+      }
+    }
+
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => {
+        if (b.totalScore !== a.totalScore) {
+          return b.totalScore - a.totalScore;
+        }
+        return a.priceDiff - b.priceDiff;
+      });
+      let best = candidates[0];
+      // Ngưỡng chấp nhận tối thiểu: điểm TÊN (chưa cộng giá/NCC) phải đạt mức tối thiểu mới
+      // được coi là 1 kết quả đáng tin - tránh việc chỉ vì giá trùng ngẫu nhiên (VD 2 dòng
+      // cùng ghi giá 0đ) mà "kéo" 1 khớp tên rất yếu vượt qua để bị nhận nhầm là kết quả đúng.
+      const MIN_NAME_SCORE_TO_ACCEPT = 170;
+      if (best.nameScore < MIN_NAME_SCORE_TO_ACCEPT) return null;
+      return best.item;
+    }
+
+    return null;
+  }
+
+  function recalcSummaryStats() {
+    let countEqual = 0, countUp = 0, countDown = 0, countUnknown = 0;
+    for (let row of currentComparison) {
+      if (row.status === 'equal') countEqual++;
+      else if (row.status === 'up') countUp++;
+      else if (row.status === 'down') countDown++;
+      else countUnknown++;
+    }
+    document.getElementById('statTotalItems').innerText = currentComparison.length;
+    document.getElementById('statEqual').innerText = countEqual;
+    document.getElementById('statUp').innerText = countUp;
+    document.getElementById('statDown').innerText = countDown;
+    document.getElementById('statUnknown').innerText = countUnknown;
+  }
+
+  function processComparison(invoiceItems) {
+    currentComparison = [];
+
+    for (let inv of invoiceItems) {
+      const matched = matchMisaItem(inv.invCode, inv.invName, inv.rawName, inv.price, inv.invBrand);
+      let diff = 0, pct = 0, status = 'unknown';
+
+      if (matched) {
+        diff = inv.price - matched.buyPrice;
+        pct = matched.buyPrice ? ((diff / matched.buyPrice) * 100).toFixed(1) : 0;
+        if (Math.abs(diff) < 1) status = 'equal';
+        else if (diff > 0) status = 'up';
+        else status = 'down';
+      }
+
+      currentComparison.push({ inv, matched, diff, pct, status });
+    }
+
+    document.getElementById('summaryBar').style.display = 'block';
+    recalcSummaryStats();
+
+    applyTableFilter();
+  }
+
+  function setFilter(status) {
+    currentFilter = status;
+    document.querySelectorAll('.filter-tab').forEach(t => {
+      t.classList.toggle('active', t.getAttribute('data-filter') === status);
+    });
+    applyTableFilter();
+  }
+
+  function applyTableFilter() {
+    const q = (document.getElementById('tableSearchInput').value || '').trim().toLowerCase();
+    const filtered = currentComparison.filter(row => {
+      const matchFilter = (currentFilter === 'all') || (row.status === currentFilter);
+      if (!matchFilter) return false;
+      if (!q) return true;
+      const invName = (row.inv.rawName || '').toLowerCase();
+      const code = (row.matched ? row.matched.code : row.inv.invCode).toLowerCase();
+      const catName = (row.matched ? row.matched.name : '').toLowerCase();
+      return invName.includes(q) || code.includes(q) || catName.includes(q);
+    });
+    renderComparisonTable(filtered);
+  }
+
+  function renderComparisonTable(list) {
+    const tbody = document.getElementById('tableBody');
+    if (list.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; color: #94a3b8; padding: 32px;">Không tìm thấy mặt hàng nào phù hợp.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = list.map((row, index) => {
+      const inv = row.inv;
+      const m = row.matched;
+      const displaySTT = inv.stt || (index + 1);
+
+      let badgeHtml = '<span class="badge badge-unknown">Không tìm thấy mã</span>';
+      if (row.status === 'equal') badgeHtml = '<span class="badge badge-equal">Bằng giá cũ</span>';
+      else if (row.status === 'up') badgeHtml = `<span class="badge badge-up">+${Math.round(row.diff).toLocaleString('vi-VN')} đ (+${row.pct}%)</span>`;
+      else if (row.status === 'down') badgeHtml = `<span class="badge badge-down">${Math.round(row.diff).toLocaleString('vi-VN')} đ (${row.pct}%)</span>`;
+
+      const misaCodeHtml = m ? `<span class="code-badge" style="background:#dcfce7; color:#15803d;">${escapeHtml(m.code)}</span>` : `<span class="code-new">Không tìm thấy mã</span>`;
+
+      let matchInfo;
+      if (m) {
+        matchInfo = `🔗 <b>Kho MISA:</b> ${escapeHtml(m.name)} ${m.desc ? `<div class="desc-match">📝 <i>Diễn giải:</i> ${escapeHtml(m.desc)}</div>` : ''}`;
+      } else if (row.notFoundExact) {
+        matchInfo = `<div class="unmatched-warn" style="color:#dc2626;">❌ <b>Không tìm thấy mã "${escapeHtml(inv.rawName)}" trong kho MISA.</b> Vui lòng kiểm tra lại mã hàng đã gõ.</div>`;
+      } else {
+        matchInfo = `<div class="unmatched-warn">❌ <b>Không tìm thấy mã phù hợp trong kho MISA</b> cho "${escapeHtml(inv.rawName)}". Có thể là hàng chưa tạo mã, hoặc dòng ghi chú/khuyến mãi không phải hàng hóa thật.</div>`;
+      }
+
+      const realIdx = currentComparison.indexOf(row);
+      const vatMisaHtml = m && m.vat ? escapeHtml(m.vat) : '-';
+      const vatHdHtml = inv.vat ? escapeHtml(inv.vat) : '-';
+      const vatMismatch = m && m.vat && inv.vat && m.vat !== inv.vat;
+
+      return `
+        <tr>
+          <td><b>${displaySTT}</b></td>
+          <td>${misaCodeHtml}</td>
+          <td>
+            ${inv.srcLabel ? `<div style="font-size:10.5px; color:#0369a1; font-weight:700; margin-bottom:2px;">📄 ${escapeHtml(inv.srcLabel)}</div>` : ''}
+            <div class="inv-name">${escapeHtml(inv.invName || inv.rawName)}</div>
+            <div class="cat-match">${matchInfo} ${realIdx >= 0 ? `<button class="btn-edit-match" onclick="openMatchModal(${realIdx})">✏️ Đổi mã</button>` : ''}</div>
+          </td>
+          <td>${escapeHtml(inv.unit || (m ? m.unit : '-'))}</td>
+          <td class="text-right"><b>${m ? m.stock.toLocaleString() : '-'}</b></td>
+          <td class="text-right">${m ? fmt(m.buyPrice) : '-'}</td>
+          <td class="text-right">${vatMisaHtml}</td>
+          <td class="text-right"><b>${inv.qty || '-'}</b></td>
+          <td class="text-right" style="color: var(--primary); font-weight: 700;">${fmt(inv.price)}</td>
+          <td class="text-right"${vatMismatch ? ' style="color:#dc2626; font-weight:700;"' : ''}>${vatHdHtml}</td>
+          <td class="text-right">${badgeHtml}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  // --- 6. GỢI Ý & TÌM KIẾM THỦ CÔNG ---
+  function setupKiotSuggestions() {
+    const input = document.getElementById('manualQuery');
+    const box = document.getElementById('kiotSuggestionsBox');
+    const listEl = document.getElementById('kiotSuggestionsList');
+
+    input.addEventListener('input', function() {
+      const q = this.value.trim();
+      if (q.length < 1 || masterCatalog.length === 0) {
+        box.style.display = 'none';
+        return;
+      }
+
+      const qClean = cleanCode(q);
+      const matches = masterCatalog.filter(m => cleanCode(m.code).includes(qClean) || normalizeText(m.name).includes(normalizeText(q))).slice(0, 8);
+
+      if (matches.length === 0) {
+        listEl.innerHTML = '<div class="kiot-empty">⚠️ Không tìm thấy phụ tùng phù hợp trong kho</div>';
+        box.style.display = 'block';
+        return;
+      }
+
+      listEl.innerHTML = matches.map(m => `
+        <div class="kiot-row" data-code="${escapeHtml(m.code)}" data-price="${m.buyPrice}">
+          <div class="kiot-code">${escapeHtml(m.code)}</div>
+          <div class="kiot-name">
+            <b>${escapeHtml(m.name)}</b>
+            ${m.desc ? `<div class="kiot-desc">📝 ${escapeHtml(m.desc)}</div>` : ''}
+          </div>
+          <div class="kiot-meta">
+            <div class="price">${fmt(m.buyPrice)}</div>
+            <div class="stock">Tồn: <b>${m.stock}</b></div>
+          </div>
+        </div>
+      `).join('');
+
+      listEl.querySelectorAll('.kiot-row').forEach(row => {
+        row.addEventListener('click', function() {
+          selectKiotItem(this.dataset.code, parseFloat(this.dataset.price));
+        });
+      });
+
+      box.style.display = 'block';
+    });
+
+    document.addEventListener('click', function(e) {
+      if (!input.contains(e.target) && !box.contains(e.target)) {
+        box.style.display = 'none';
+      }
+    });
+
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        box.style.display = 'none';
+        doManualSearch();
+      }
+    });
+  }
+
+  function selectKiotItem(code, price) {
+    document.getElementById('manualQuery').value = code;
+    if (!document.getElementById('manualPrice').value && price) {
+      document.getElementById('manualPrice').value = price;
+    }
+    document.getElementById('kiotSuggestionsBox').style.display = 'none';
+    doManualSearch();
+  }
+
+  // Nhận diện chuỗi người dùng gõ có PHẢI LÀ MÃ HÀNG hay không (không có khoảng trắng,
+  // chỉ gồm chữ/số/dấu . - / , có ít nhất 1 chữ số). Nếu đúng là mã hàng, tra cứu phải
+  // CHÍNH XÁC TUYỆT ĐỐI, không được rơi về chế độ dò tên mờ (tránh báo nhầm sản phẩm khác).
+  function looksLikeCode(raw) {
+    let s = String(raw || '').trim();
+    if (!s || /\s/.test(s)) return false;
+    if (!/^[A-Za-z0-9][A-Za-z0-9.\-\/]{1,30}$/.test(s)) return false;
+    if (!/\d/.test(s)) return false;
+    return true;
+  }
+
+  // Tra cứu CHÍNH XÁC theo mã hàng (không fallback sang dò tên), dùng khi người dùng
+  // gõ trực tiếp mã vào ô tra cứu thủ công.
+  function findExactCodeMatch(raw, priceHint) {
+    let cleanQ = cleanCode(raw);
+    if (!cleanQ) return null;
+    let exactCodes = masterCatalog.filter(it => cleanCode(it.code) === cleanQ);
+    if (exactCodes.length === 0) return null;
+    if (exactCodes.length === 1) return exactCodes[0];
+    exactCodes.sort((a, b) => Math.abs((Number(a.buyPrice) || 0) - (priceHint || 0)) - Math.abs((Number(b.buyPrice) || 0) - (priceHint || 0)));
+    return exactCodes[0];
+  }
+
+  function doManualSearch() {
+    const raw = document.getElementById('manualQuery').value.trim();
+    const p = parseFloat(document.getElementById('manualPrice').value) || null;
+    const q = parseFloat(document.getElementById('manualQty').value) || 1;
+    document.getElementById('kiotSuggestionsBox').style.display = 'none';
+
+    if (!raw || masterCatalog.length === 0) return;
+
+    isManualSearchMode = true;
+    document.getElementById('cardHeaderTitle').innerText = `🔍 Kết quả tra cứu cho: "${raw}"`;
+
+    const treatAsCode = looksLikeCode(raw);
+    let item = null;
+    let displayCode = raw;
+    let displayName = raw;
+
+    if (treatAsCode) {
+      // Gõ trực tiếp mã hàng -> chỉ chấp nhận khớp CHÍNH XÁC, không tự ý đoán sang tên khác
+      item = findExactCodeMatch(raw, p);
+      displayCode = raw;
+      displayName = raw;
+    } else {
+      const splitRes = splitPartCodeAndName(raw);
+      item = matchMisaItem(splitRes.code, splitRes.name, raw, p);
+      displayCode = splitRes.code;
+      displayName = splitRes.name;
+    }
+
+    if (item) {
+      const priceToCompare = p !== null ? p : item.buyPrice;
+      let diff = p !== null ? p - item.buyPrice : 0;
+      let pct = p !== null && item.buyPrice ? ((diff / item.buyPrice) * 100).toFixed(1) : 0;
+      let status = Math.abs(diff) < 1 ? 'equal' : (diff > 0 ? 'up' : 'down');
+
+      renderComparisonTable([{
+        stt: 1,
+        inv: { stt: 1, rawName: raw, invCode: displayCode, invName: displayName, unit: item.unit, qty: q, price: priceToCompare },
+        matched: item,
+        diff: diff,
+        pct: pct,
+        status: status
+      }]);
+    } else {
+      renderComparisonTable([{
+        stt: 1,
+        inv: { stt: 1, rawName: raw, invCode: displayCode, invName: displayName, unit: 'Chiếc', qty: q, price: p || 0 },
+        matched: null,
+        diff: 0,
+        pct: 0,
+        status: 'unknown',
+        notFoundExact: treatAsCode
+      }]);
+    }
+  }
+
+  function addManualToComparison() {
+    const raw = document.getElementById('manualQuery').value.trim();
+    const p = parseFloat(document.getElementById('manualPrice').value) || 0;
+    const q = parseFloat(document.getElementById('manualQty').value) || 1;
+    if (!raw) return;
+
+    const treatAsCode = looksLikeCode(raw);
+    let matched, displayCode, displayName;
+
+    if (treatAsCode) {
+      matched = findExactCodeMatch(raw, p);
+      displayCode = raw;
+      displayName = raw;
+    } else {
+      const splitRes = splitPartCodeAndName(raw);
+      matched = matchMisaItem(splitRes.code, splitRes.name, raw, p);
+      displayCode = splitRes.code;
+      displayName = splitRes.name;
+    }
+
+    let diff = matched ? p - matched.buyPrice : 0;
+    let pct = matched && matched.buyPrice ? ((diff / matched.buyPrice) * 100).toFixed(1) : 0;
+    let status = matched ? (Math.abs(diff) < 1 ? 'equal' : (diff > 0 ? 'up' : 'down')) : 'unknown';
+
+    currentComparison.push({
+      inv: { stt: currentComparison.length + 1, rawName: raw, invCode: displayCode, invName: displayName, unit: matched ? matched.unit : 'Chiếc', qty: q, price: p },
+      matched: matched,
+      diff: diff,
+      pct: pct,
+      status: status,
+      notFoundExact: treatAsCode && !matched
+    });
+    
+    applyTableFilter();
+  }
+
+  function clearManualSearch() {
+    document.getElementById('manualQuery').value = '';
+    document.getElementById('manualPrice').value = '';
+    if (currentComparison.length > 0) applyTableFilter();
+  }
+
+  // --- 7. MODAL ĐỔI MÃ ---
+  function openMatchModal(index) {
+    activeEditingIndex = index;
+    const row = currentComparison[index];
+    document.getElementById('modalInvName').innerText = row.inv.rawName;
+    document.getElementById('modalSearchCatalog').value = row.inv.invCode || row.inv.invName;
+    document.getElementById('matchModal').style.display = 'flex';
+    searchCatalogInModal();
+  }
+
+  function closeMatchModal() {
+    document.getElementById('matchModal').style.display = 'none';
+    activeEditingIndex = null;
+  }
+
+  function searchCatalogInModal() {
+    const q = document.getElementById('modalSearchCatalog').value.trim();
+    const resBox = document.getElementById('modalSearchResults');
+    if (!q) { resBox.innerHTML = '<div style="padding: 10px; color: #94a3b8;">Nhập mã hoặc tên cần tìm...</div>'; return; }
+
+    const qClean = cleanCode(q);
+    const results = masterCatalog.filter(m => cleanCode(m.code).includes(qClean) || normalizeText(m.name).includes(normalizeText(q))).slice(0, 30);
+
+    if (results.length === 0) {
+      resBox.innerHTML = '<div style="padding: 10px; color: #94a3b8;">Không tìm thấy mã phù hợp trong kho.</div>';
+      return;
+    }
+
+    resBox.innerHTML = results.map(item => `
+      <div class="modal-item-row" data-code="${escapeHtml(item.code)}" style="padding: 8px; border-bottom: 1px solid #f1f5f9; cursor: pointer; display: flex; justify-content: space-between;">
+        <div>
+          <span class="code-badge">${escapeHtml(item.code)}</span> <b>${escapeHtml(item.name)}</b>
+          ${item.desc ? `<div style="font-size: 11.5px; color: #0284c7;">📝 ${escapeHtml(item.desc)}</div>` : ''}
+        </div>
+        <div style="text-align: right; white-space: nowrap;">
+          <div style="font-weight: 700; color: #2563eb;">${fmt(item.buyPrice)}</div>
+          <div style="font-size: 11px; color: #64748b;">Tồn: ${item.stock}</div>
+        </div>
+      </div>
+    `).join('');
+
+    resBox.querySelectorAll('.modal-item-row').forEach(row => {
+      row.addEventListener('click', function() {
+        selectCatalogMatch(this.dataset.code);
+      });
+    });
+  }
+
+  function selectCatalogMatch(code) {
+    if (activeEditingIndex === null) return;
+    const selected = masterCatalog.find(i => i.code === code);
+    if (!selected) return;
+
+    const row = currentComparison[activeEditingIndex];
+    row.matched = selected;
+    row.diff = row.inv.price - selected.buyPrice;
+    row.pct = selected.buyPrice ? ((row.diff / selected.buyPrice) * 100).toFixed(1) : 0;
+    row.status = Math.abs(row.diff) < 1 ? 'equal' : (row.diff > 0 ? 'up' : 'down');
+
+    closeMatchModal();
+    recalcSummaryStats();
+    applyTableFilter();
+  }
+
+  // --- 8. XUẤT EXCEL CHO KẾ TOÁN ---
+  function exportComparisonExcel() {
+    if (currentComparison.length === 0) { alert('Chưa có dữ liệu để xuất!'); return; }
+    const exportData = currentComparison.map((r, i) => ({
+      "STT": r.inv.stt || (i + 1),
+      "Nguồn hóa đơn": r.inv.srcLabel || currentInvoiceName || "",
+      "Mã hàng MISA": r.matched ? r.matched.code : "MÃ MỚI (CẦN TẠO)",
+      "Tên hàng HĐ": r.inv.invName || r.inv.rawName,
+      "Tên hàng kho MISA": r.matched ? r.matched.name : "",
+      "Diễn giải kho": r.matched ? (r.matched.desc || "") : "",
+      "ĐVT": r.inv.unit || (r.matched ? r.matched.unit : ""),
+      "Tồn MISA": r.matched ? r.matched.stock : 0,
+      "Giá mua cũ": r.matched ? r.matched.buyPrice : 0,
+      "VAT MISA": r.matched ? (r.matched.vat || "") : "",
+      "SL HĐ": r.inv.qty,
+      "Đơn giá HĐ": r.inv.price,
+      "VAT HĐ": r.inv.vat || "",
+      "Chênh lệch": r.diff,
+      "% Biến động": r.pct ? r.pct + "%" : "",
+      "Trạng thái": r.matched ? (r.status === 'equal' ? 'Bằng giá' : (r.status === 'up' ? 'Tăng giá' : 'Giảm giá')) : 'Mã mới cần tạo vào MISA'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Doi_Soat");
+    XLSX.writeFile(wb, currentInvoiceName ? `DoiSoat_${currentInvoiceName.replace(/\.[^/.]+$/, "")}.xlsx` : "Ket_Qua_Doi_Soat.xlsx");
+  }
+</script>
+</body>
+</html>
