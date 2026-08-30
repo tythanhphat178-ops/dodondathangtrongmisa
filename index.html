@@ -78,8 +78,17 @@
 
         <!-- Khung kết quả -->
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-            <div class="flex justify-between items-center mb-3 pb-2 border-b">
-                <h3 class="font-bold text-sm text-slate-800 uppercase">Kết Quả Đối Soát (<span id="resultCount" class="text-blue-600 font-bold">0</span> mã)</h3>
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-3 pb-2 border-b">
+                <div class="flex flex-wrap items-center gap-2">
+                    <h3 class="font-bold text-sm text-slate-800 uppercase">Kết Quả Đối Soát (<span id="resultCount" class="text-blue-600 font-bold">0</span> mã)</h3>
+                    <!-- THANH BỘ LỌC TRẠNG THÁI -->
+                    <div class="inline-flex rounded-lg border border-slate-300 bg-slate-50 p-0.5 text-xs font-semibold">
+                        <button onclick="setFilter('ALL')" id="filterAll" class="px-2.5 py-1 rounded-md bg-blue-600 text-white transition shadow-sm">Tất cả</button>
+                        <button onclick="setFilter('PASS')" id="filterPass" class="px-2.5 py-1 rounded-md text-slate-700 hover:bg-slate-200 transition">🟢 Xuất hàng</button>
+                        <button onclick="setFilter('FAIL')" id="filterFail" class="px-2.5 py-1 rounded-md text-slate-700 hover:bg-slate-200 transition">🔴 Từ chối</button>
+                        <button onclick="setFilter('WARN')" id="filterWarn" class="px-2.5 py-1 rounded-md text-slate-700 hover:bg-slate-200 transition">🟡 Cảnh báo</button>
+                    </div>
+                </div>
                 <button onclick="exportResultExcel()" id="btnExport" class="text-xs bg-emerald-600 text-white font-semibold px-4 py-1.5 rounded-lg shadow disabled:opacity-50" disabled>
                     <i class="fa-solid fa-file-excel"></i> Tải Báo Cáo (.xlsx)
                 </button>
@@ -115,6 +124,7 @@
         let mapMisa = new Map();
         let mapSv = new Map();
         let currentOrderRows = [];
+        let currentFilter = 'ALL';
 
         window.addEventListener('DOMContentLoaded', () => {
             forceSyncFromGitHub();
@@ -167,17 +177,10 @@
             return bestRows;
         }
 
-        // Tải file trực tiếp qua raw.githubusercontent.com (KHÔNG giới hạn 1MB như Contents API,
-        // và chống cache CDN bằng query ngẫu nhiên mỗi lần gọi).
-        // Contents API (api.github.com/.../contents/...) chỉ trả field "content" (base64)
-        // khi file < 1MB. Khi bạn cập nhật thêm dữ liệu tồn kho, file misa.xlsx/sv.xlsx phình to
-        // vượt 1MB, API trả về response KHÔNG có "content" => code cũ coi như "không tìm thấy file"
-        // và giữ nguyên dữ liệu tồn cũ. Đây chính là lý do "mỗi khi cập nhật là không được".
-        const GITHUB_BRANCHES = ['main']; // Đã xác nhận repo dùng nhánh "main" (xem GitHub Pages Settings) — bỏ thử "master" để tiết kiệm hạn mức API
+        const GITHUB_BRANCHES = ['main'];
         let lastMisaSig = null;
         let lastSvSig = null;
 
-        // Chữ ký nhanh của buffer để phát hiện "GitHub trả về y hệt lần trước" (tức là chưa kịp cập nhật)
         function quickSignature(buf) {
             if (!buf) return null;
             const bytes = new Uint8Array(buf);
@@ -202,7 +205,7 @@
                         if (data.sha) return data.sha;
                     }
                 } catch (err) {
-                    console.warn(`Không lấy được SHA của ${fileName} (branch ${branch}):`, err);
+                    console.warn(`Không lấy được SHA của ${fileName}:`, err);
                 }
             }
             return null;
@@ -229,16 +232,12 @@
         }
 
         async function fetchFileViaAPI(fileName) {
-            // Ưu tiên 1: GitHub Data API (SHA -> blob) — đọc thẳng từ dữ liệu commit mới nhất,
-            // KHÔNG qua CDN cache 5 phút => nạp gần như tức thì ngay sau khi bạn cập nhật file.
             const sha = await getFileSha(fileName);
             if (sha) {
                 const buf = await fetchBlobBySha(sha);
                 if (buf) return buf;
             }
 
-            // Dự phòng: raw.githubusercontent.com (dùng khi API bị giới hạn tốc độ / lỗi mạng).
-            // Có thể chậm hơn do CDN cache, nên vẫn giữ query ngẫu nhiên để né cache tối đa có thể.
             for (const branch of GITHUB_BRANCHES) {
                 try {
                     const bust = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -248,7 +247,7 @@
                         return await res.arrayBuffer();
                     }
                 } catch (err) {
-                    console.warn(`Lỗi tải ${fileName} (branch ${branch}):`, err);
+                    console.warn(`Lỗi tải ${fileName}:`, err);
                 }
             }
             return null;
@@ -262,7 +261,7 @@
             const syncEl = document.getElementById('syncStatus');
             syncEl.innerHTML = attempt === 1
                 ? `<i class="fa-solid fa-rotate animate-spin"></i> Đang tải dữ liệu trực tiếp từ GitHub...`
-                : `<i class="fa-solid fa-rotate animate-spin"></i> GitHub có thể chưa kịp cập nhật, đang thử lại (lần ${attempt}/${MAX_AUTO_RETRY})...`;
+                : `<i class="fa-solid fa-rotate animate-spin"></i> Đang thử lại (lần ${attempt}/${MAX_AUTO_RETRY})...`;
 
             try {
                 const [bufMisa, bufSv] = await Promise.all([
@@ -294,8 +293,6 @@
 
                 updateStats();
 
-                // Nếu vừa mới đồng bộ trước đó rồi (đã có chữ ký cũ) mà nội dung tải về y hệt,
-                // rất có thể CDN của GitHub chưa kịp trả bản mới -> tự thử lại thêm vài lần.
                 if (loaded === 2 && unchanged && lastMisaSig !== null && attempt < MAX_AUTO_RETRY) {
                     await sleep(RETRY_DELAY_MS);
                     return forceSyncFromGitHub(attempt + 1);
@@ -308,10 +305,10 @@
                     syncEl.innerHTML = `<span class="text-emerald-700 font-bold"><i class="fa-solid fa-circle-check"></i> Đã đồng bộ mới nhất (${mapSv.size.toLocaleString()} mã SV, ${mapMisa.size.toLocaleString()} mã MISA)</span>`;
                     if(currentOrderRows.length > 0) recomputeAll();
                 } else if (loaded === 1) {
-                    syncEl.innerHTML = `<span class="text-amber-700"><i class="fa-solid fa-triangle-exclamation"></i> Chỉ tải được ${2-missing.length}/2 file. Không tìm thấy: <b>${missing.join(', ')}</b> trên GitHub (kiểm tra tên file/nhánh, hoặc dùng nút "Chọn file tại máy" để nạp tạm).</span>`;
+                    syncEl.innerHTML = `<span class="text-amber-700"><i class="fa-solid fa-triangle-exclamation"></i> Chỉ tải được ${2-missing.length}/2 file. Không tìm thấy: <b>${missing.join(', ')}</b> trên GitHub.</span>`;
                     if(currentOrderRows.length > 0) recomputeAll();
                 } else {
-                    syncEl.innerHTML = `<span class="text-red-700"><i class="fa-solid fa-circle-xmark"></i> Không tải được misa.xlsx và sv.xlsx từ GitHub. Kiểm tra tên repo/nhánh, hoặc dùng nút "Chọn file tại máy" để nạp tạm.</span>`;
+                    syncEl.innerHTML = `<span class="text-red-700"><i class="fa-solid fa-circle-xmark"></i> Không tải được misa.xlsx và sv.xlsx từ GitHub.</span>`;
                 }
             } catch (err) {
                 syncEl.innerHTML = `<span class="text-red-700">Lỗi kết nối: ${err.message}</span>`;
@@ -323,7 +320,6 @@
             document.getElementById('statSv').innerHTML = `SV: <b class="text-yellow-300">${mapSv.size.toLocaleString()}</b> mã`;
         }
 
-        // Đọc MISA: Cột B (Mã), Cột C (Tên), Cột E (ĐVT), Cột F (SL Tồn)
         function parseMisaDirect(rows) {
             mapMisa.clear();
             if (!rows || rows.length === 0) return;
@@ -343,7 +339,6 @@
             }
         }
 
-        // Đọc SV: Cột A (Mã), Cột B (Tên), Cột C (ĐVT), Cột G (Tồn Cuối)
         function parseSvDirect(rows) {
             mapSv.clear();
             if (!rows || rows.length === 0) return;
@@ -406,14 +401,34 @@
             renderTable();
         }
 
+        function setFilter(status) {
+            currentFilter = status;
+            ['All', 'Pass', 'Fail', 'Warn'].forEach(s => {
+                const btn = document.getElementById('filter' + s);
+                if (s.toUpperCase() === status || (status === 'ALL' && s === 'All')) {
+                    btn.className = 'px-2.5 py-1 rounded-md bg-blue-600 text-white transition shadow-sm';
+                } else {
+                    btn.className = 'px-2.5 py-1 rounded-md text-slate-700 hover:bg-slate-200 transition';
+                }
+            });
+            renderTable();
+        }
+
         function renderTable() {
             const tbody = document.getElementById('resultTbody');
-            document.getElementById('resultCount').innerText = currentOrderRows.length;
-            if(currentOrderRows.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="11" class="p-6 text-center text-slate-400 italic">Chưa có dữ liệu đơn hàng.</td></tr>`;
+            const filteredRows = currentOrderRows.filter(r => {
+                if (currentFilter === 'ALL') return true;
+                return r.status === currentFilter;
+            });
+
+            document.getElementById('resultCount').innerText = `${filteredRows.length} / ${currentOrderRows.length}`;
+
+            if(filteredRows.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="11" class="p-6 text-center text-slate-400 italic">Không có mã nào phù hợp với bộ lọc này.</td></tr>`;
                 return;
             }
-            tbody.innerHTML = currentOrderRows.map((r, idx) => `
+
+            tbody.innerHTML = filteredRows.map((r, idx) => `
                 <tr class="hover:bg-slate-50 border-b">
                     <td class="p-2.5 text-center text-slate-500">${idx+1}</td>
                     <td class="p-2.5 font-bold text-blue-800">${r.code || '-'}</td>
