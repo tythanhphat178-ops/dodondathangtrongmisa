@@ -50,3 +50,397 @@
                     <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded shadow">
                         <i class="fa-solid fa-file-excel"></i> Chọn MISA
                         <input type="file" id="localMisa" accept=".xlsx,.xls" class="hidden">
+                    </label>
+                    <label class="cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded shadow">
+                        <i class="fa-solid fa-file-excel"></i> Chọn SV
+                        <input type="file" id="localSv" accept=".xlsx,.xls" class="hidden">
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Khung nạp toa hàng cần dò -->
+        <div class="bg-gradient-to-r from-blue-50 via-indigo-50 to-white rounded-xl shadow-sm border-2 border-blue-400 p-4">
+            <h2 class="text-sm font-bold text-blue-900 uppercase flex items-center gap-2 mb-2">
+                <i class="fa-solid fa-file-invoice text-blue-700"></i> Nạp Đơn Hàng / Toa Hàng Cần Dò
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div class="p-3 bg-white rounded-xl border border-blue-200">
+                    <label class="text-xs font-bold text-blue-900 mb-1 block">Chọn File Excel Đơn Hàng</label>
+                    <input type="file" id="fileOrder" accept=".xlsx, .xls, .csv" class="block w-full text-xs text-slate-600 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-blue-600 file:text-white cursor-pointer">
+                </div>
+                <div class="p-3 bg-white rounded-xl border border-indigo-200">
+                    <label class="text-xs font-bold text-indigo-900 mb-1 block">Hoặc Dán bảng đơn hàng (Ctrl + V)</label>
+                    <textarea id="pasteOrderInput" rows="1" placeholder="Dán bảng đơn hàng vào đây..." class="w-full text-xs font-mono border rounded p-1.5"></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- Khung kết quả -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            <div class="flex justify-between items-center mb-3 pb-2 border-b">
+                <h3 class="font-bold text-sm text-slate-800 uppercase">Kết Quả Đối Soát (<span id="resultCount" class="text-blue-600 font-bold">0</span> mã)</h3>
+                <button onclick="exportResultExcel()" id="btnExport" class="text-xs bg-emerald-600 text-white font-semibold px-4 py-1.5 rounded-lg shadow disabled:opacity-50" disabled>
+                    <i class="fa-solid fa-file-excel"></i> Tải Báo Cáo (.xlsx)
+                </button>
+            </div>
+            <div class="overflow-x-auto max-h-[500px]">
+                <table class="w-full text-xs text-left border">
+                    <thead class="bg-slate-100 uppercase sticky top-0">
+                        <tr>
+                            <th class="p-2.5 border text-center">STT</th>
+                            <th class="p-2.5 border">Mã Hàng</th>
+                            <th class="p-2.5 border">Tên Hàng Hóa</th>
+                            <th class="p-2.5 border text-center">ĐVT</th>
+                            <th class="p-2.5 border text-center">SL Đơn</th>
+                            <th class="p-2.5 border text-right">Tồn SV</th>
+                            <th class="p-2.5 border text-right">Tổng (SL+SV)</th>
+                            <th class="p-2.5 border text-right">Tồn MISA</th>
+                            <th class="p-2.5 border text-right">Lệch</th>
+                            <th class="p-2.5 border text-center">Quyết Định</th>
+                            <th class="p-2.5 border">Giải Thích</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultTbody">
+                        <tr><td colspan="11" class="p-6 text-center text-slate-400 italic">Chưa có dữ liệu đơn hàng.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const GITHUB_USER = "tythanhphat178-ops"; 
+        const GITHUB_REPO = "dodondathangtrongmisa";      
+        let mapMisa = new Map();
+        let mapSv = new Map();
+        let currentOrderRows = [];
+
+        window.addEventListener('DOMContentLoaded', () => {
+            forceSyncFromGitHub();
+
+            document.getElementById('fileOrder').addEventListener('change', e => handleOrderFile(e.target.files[0]));
+            document.getElementById('pasteOrderInput').addEventListener('input', e => {
+                if(e.target.value.trim()) parseOrderRows(e.target.value.split('\n').map(l => l.split('\t')));
+            });
+
+            document.getElementById('localMisa').addEventListener('change', e => {
+                const f = e.target.files[0];
+                if (!f) return;
+                const r = new FileReader();
+                r.onload = ev => {
+                    const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+                    parseMisaDirect(getLargestSheetRows(wb));
+                    updateStats();
+                    if(currentOrderRows.length > 0) recomputeAll();
+                    document.getElementById('syncStatus').innerHTML = `<span class="text-emerald-700 font-bold"><i class="fa-solid fa-check"></i> Đã nạp trực tiếp file MISA (${mapMisa.size.toLocaleString()} mã)</span>`;
+                };
+                r.readAsArrayBuffer(f);
+            });
+
+            document.getElementById('localSv').addEventListener('change', e => {
+                const f = e.target.files[0];
+                if (!f) return;
+                const r = new FileReader();
+                r.onload = ev => {
+                    const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+                    parseSvDirect(getLargestSheetRows(wb));
+                    updateStats();
+                    if(currentOrderRows.length > 0) recomputeAll();
+                    document.getElementById('syncStatus').innerHTML = `<span class="text-emerald-700 font-bold"><i class="fa-solid fa-check"></i> Đã nạp trực tiếp file SV (${mapSv.size.toLocaleString()} mã)</span>`;
+                };
+                r.readAsArrayBuffer(f);
+            });
+        });
+
+        function getLargestSheetRows(wb) {
+            let maxRows = 0;
+            let bestRows = [];
+            for (let name of wb.SheetNames) {
+                let sheet = wb.Sheets[name];
+                let rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+                if (rows.length > maxRows) {
+                    maxRows = rows.length;
+                    bestRows = rows;
+                }
+            }
+            return bestRows;
+        }
+
+        // Tải file trực tiếp qua raw.githubusercontent.com (KHÔNG giới hạn 1MB như Contents API,
+        // và chống cache CDN bằng query ngẫu nhiên mỗi lần gọi).
+        // Contents API (api.github.com/.../contents/...) chỉ trả field "content" (base64)
+        // khi file < 1MB. Khi bạn cập nhật thêm dữ liệu tồn kho, file misa.xlsx/sv.xlsx phình to
+        // vượt 1MB, API trả về response KHÔNG có "content" => code cũ coi như "không tìm thấy file"
+        // và giữ nguyên dữ liệu tồn cũ. Đây chính là lý do "mỗi khi cập nhật là không được".
+        const GITHUB_BRANCHES = ['main', 'master'];
+        let lastMisaSig = null;
+        let lastSvSig = null;
+
+        // Chữ ký nhanh của buffer để phát hiện "GitHub trả về y hệt lần trước" (tức là chưa kịp cập nhật)
+        function quickSignature(buf) {
+            if (!buf) return null;
+            const bytes = new Uint8Array(buf);
+            let hash = bytes.length;
+            const step = Math.max(1, Math.floor(bytes.length / 256));
+            for (let i = 0; i < bytes.length; i += step) {
+                hash = (hash * 31 + bytes[i]) >>> 0;
+            }
+            return hash;
+        }
+
+        async function getFileSha(fileName) {
+            for (const branch of GITHUB_BRANCHES) {
+                try {
+                    const url = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${fileName}?ref=${branch}&_=${Date.now()}`;
+                    const res = await fetch(url, {
+                        headers: { 'Accept': 'application/vnd.github.v3+json' },
+                        cache: 'no-store'
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.sha) return data.sha;
+                    }
+                } catch (err) {
+                    console.warn(`Không lấy được SHA của ${fileName} (branch ${branch}):`, err);
+                }
+            }
+            return null;
+        }
+
+        async function fetchBlobBySha(sha) {
+            try {
+                const url = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/git/blobs/${sha}`;
+                const res = await fetch(url, {
+                    headers: { 'Accept': 'application/vnd.github.v3+json' },
+                    cache: 'no-store'
+                });
+                if (!res.ok) return null;
+                const data = await res.json();
+                if (!data.content) return null;
+                const binaryString = atob(data.content.replace(/\s/g, ''));
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+                return bytes.buffer;
+            } catch (err) {
+                console.warn('Lỗi tải blob:', err);
+                return null;
+            }
+        }
+
+        async function fetchFileViaAPI(fileName) {
+            // Ưu tiên 1: GitHub Data API (SHA -> blob) — đọc thẳng từ dữ liệu commit mới nhất,
+            // KHÔNG qua CDN cache 5 phút => nạp gần như tức thì ngay sau khi bạn cập nhật file.
+            const sha = await getFileSha(fileName);
+            if (sha) {
+                const buf = await fetchBlobBySha(sha);
+                if (buf) return buf;
+            }
+
+            // Dự phòng: raw.githubusercontent.com (dùng khi API bị giới hạn tốc độ / lỗi mạng).
+            // Có thể chậm hơn do CDN cache, nên vẫn giữ query ngẫu nhiên để né cache tối đa có thể.
+            for (const branch of GITHUB_BRANCHES) {
+                try {
+                    const bust = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+                    const rawUrl = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/${branch}/${fileName}?bust=${bust}`;
+                    const res = await fetch(rawUrl, { cache: 'no-store' });
+                    if (res.ok) {
+                        return await res.arrayBuffer();
+                    }
+                } catch (err) {
+                    console.warn(`Lỗi tải ${fileName} (branch ${branch}):`, err);
+                }
+            }
+            return null;
+        }
+
+        const MAX_AUTO_RETRY = 3;
+        const RETRY_DELAY_MS = 4000;
+        const sleep = ms => new Promise(res => setTimeout(res, ms));
+
+        async function forceSyncFromGitHub(attempt = 1) {
+            const syncEl = document.getElementById('syncStatus');
+            syncEl.innerHTML = attempt === 1
+                ? `<i class="fa-solid fa-rotate animate-spin"></i> Đang tải dữ liệu trực tiếp từ GitHub...`
+                : `<i class="fa-solid fa-rotate animate-spin"></i> GitHub có thể chưa kịp cập nhật, đang thử lại (lần ${attempt}/${MAX_AUTO_RETRY})...`;
+
+            try {
+                const [bufMisa, bufSv] = await Promise.all([
+                    fetchFileViaAPI('misa.xlsx'),
+                    fetchFileViaAPI('sv.xlsx')
+                ]);
+
+                let loaded = 0;
+                const missing = [];
+                const sigMisa = quickSignature(bufMisa);
+                const sigSv = quickSignature(bufSv);
+                const unchanged = bufMisa && bufSv && sigMisa === lastMisaSig && sigSv === lastSvSig;
+
+                if (bufMisa) {
+                    const wbMisa = XLSX.read(new Uint8Array(bufMisa), { type: 'array' });
+                    parseMisaDirect(getLargestSheetRows(wbMisa));
+                    loaded++;
+                } else {
+                    missing.push('misa.xlsx');
+                }
+
+                if (bufSv) {
+                    const wbSv = XLSX.read(new Uint8Array(bufSv), { type: 'array' });
+                    parseSvDirect(getLargestSheetRows(wbSv));
+                    loaded++;
+                } else {
+                    missing.push('sv.xlsx');
+                }
+
+                updateStats();
+
+                // Nếu vừa mới đồng bộ trước đó rồi (đã có chữ ký cũ) mà nội dung tải về y hệt,
+                // rất có thể CDN của GitHub chưa kịp trả bản mới -> tự thử lại thêm vài lần.
+                if (loaded === 2 && unchanged && lastMisaSig !== null && attempt < MAX_AUTO_RETRY) {
+                    await sleep(RETRY_DELAY_MS);
+                    return forceSyncFromGitHub(attempt + 1);
+                }
+
+                lastMisaSig = sigMisa;
+                lastSvSig = sigSv;
+
+                if (loaded === 2) {
+                    syncEl.innerHTML = `<span class="text-emerald-700 font-bold"><i class="fa-solid fa-circle-check"></i> Đã đồng bộ mới nhất (${mapSv.size.toLocaleString()} mã SV, ${mapMisa.size.toLocaleString()} mã MISA)</span>`;
+                    if(currentOrderRows.length > 0) recomputeAll();
+                } else if (loaded === 1) {
+                    syncEl.innerHTML = `<span class="text-amber-700"><i class="fa-solid fa-triangle-exclamation"></i> Chỉ tải được ${2-missing.length}/2 file. Không tìm thấy: <b>${missing.join(', ')}</b> trên GitHub (kiểm tra tên file/nhánh, hoặc dùng nút "Chọn file tại máy" để nạp tạm).</span>`;
+                    if(currentOrderRows.length > 0) recomputeAll();
+                } else {
+                    syncEl.innerHTML = `<span class="text-red-700"><i class="fa-solid fa-circle-xmark"></i> Không tải được misa.xlsx và sv.xlsx từ GitHub. Kiểm tra tên repo/nhánh, hoặc dùng nút "Chọn file tại máy" để nạp tạm.</span>`;
+                }
+            } catch (err) {
+                syncEl.innerHTML = `<span class="text-red-700">Lỗi kết nối: ${err.message}</span>`;
+            }
+        }
+
+        function updateStats() {
+            document.getElementById('statMisa').innerHTML = `MISA: <b class="text-yellow-300">${mapMisa.size.toLocaleString()}</b> mã`;
+            document.getElementById('statSv').innerHTML = `SV: <b class="text-yellow-300">${mapSv.size.toLocaleString()}</b> mã`;
+        }
+
+        // Đọc MISA: Cột B (Mã), Cột C (Tên), Cột E (ĐVT), Cột F (SL Tồn)
+        function parseMisaDirect(rows) {
+            mapMisa.clear();
+            if (!rows || rows.length === 0) return;
+            for (let i = 0; i < rows.length; i++) {
+                const r = rows[i];
+                if (!r || r.length === 0) continue;
+                let code = (r[1] !== undefined && r[1] !== null ? r[1].toString() : '').trim();
+                let lowerCode = code.toLowerCase();
+                if (!code || lowerCode === 'mã' || lowerCode.includes('danh sách') || lowerCode.startsWith('tổng')) continue;
+
+                let name = (r[2] !== undefined && r[2] !== null ? r[2].toString() : '').trim();
+                let unit = (r[4] !== undefined && r[4] !== null ? r[4].toString() : '').trim();
+                let tonStr = (r[5] !== undefined && r[5] !== null ? r[5].toString() : '0').replace(/,/g, '').trim();
+                let tonMisa = parseFloat(tonStr) || 0;
+
+                mapMisa.set(lowerCode, { code, name, unit, tonMisa });
+            }
+        }
+
+        // Đọc SV: Cột A (Mã), Cột B (Tên), Cột C (ĐVT), Cột G (Tồn Cuối)
+        function parseSvDirect(rows) {
+            mapSv.clear();
+            if (!rows || rows.length === 0) return;
+            for (let i = 0; i < rows.length; i++) {
+                const r = rows[i];
+                if (!r || r.length === 0) continue;
+                let code = (r[0] !== undefined && r[0] !== null ? r[0].toString() : '').trim();
+                let lowerCode = code.toLowerCase();
+                if (!code || lowerCode.includes('mã') || lowerCode.startsWith('tổng')) continue;
+
+                let name = (r[1] !== undefined && r[1] !== null ? r[1].toString() : '').trim();
+                let unit = (r[2] !== undefined && r[2] !== null ? r[2].toString() : '').trim();
+                let tonStr = (r[6] !== undefined && r[6] !== null ? r[6].toString() : '0').replace(/,/g, '').trim();
+                let tonSv = parseFloat(tonStr) || 0;
+
+                mapSv.set(lowerCode, { code, name, unit, tonSv });
+            }
+        }
+
+        function handleOrderFile(file) {
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+                const data = new Uint8Array(e.target.result);
+                const wb = XLSX.read(data, { type: 'array' });
+                parseOrderRows(getLargestSheetRows(wb));
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function parseOrderRows(rows) {
+            currentOrderRows = [];
+            for(let i = 1; i < rows.length; i++) {
+                const r = rows[i];
+                if(!r || r.length === 0) continue;
+                const code = (r[0] || '').toString().trim();
+                const name = (r[1] || '').toString().trim();
+                const unit = (r[2] || '').toString().trim();
+                const qty = parseFloat((r[3] || '1').toString().replace(/,/g,'')) || 1;
+                if(code || name) currentOrderRows.push({ code, name, unit, qty });
+            }
+            recomputeAll();
+        }
+
+        function recomputeAll() {
+            currentOrderRows.forEach(r => {
+                const key = r.code.toLowerCase().trim();
+                const m = mapMisa.get(key);
+                const s = mapSv.get(key);
+                r.tonMisa = m ? m.tonMisa : 0;
+                r.tonSv = s ? s.tonSv : 0;
+                r.total = r.qty + r.tonSv;
+                r.diff = r.total - r.tonMisa;
+
+                if (!s && !m) { r.decision = '🟡 CẢNH BÁO'; r.reason = 'Mã mới chưa có tồn'; r.status = 'WARN'; }
+                else if (r.tonMisa === r.tonSv || r.diff > 3) { r.decision = '🟢 XUẤT HÀNG'; r.reason = 'Đủ điều kiện xuất'; r.status = 'PASS'; }
+                else { r.decision = '🔴 TỪ CHỐI'; r.reason = 'Lệch tồn kho không đủ điều kiện'; r.status = 'FAIL'; }
+            });
+            document.getElementById('btnExport').disabled = currentOrderRows.length === 0;
+            renderTable();
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('resultTbody');
+            document.getElementById('resultCount').innerText = currentOrderRows.length;
+            if(currentOrderRows.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="11" class="p-6 text-center text-slate-400 italic">Chưa có dữ liệu đơn hàng.</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = currentOrderRows.map((r, idx) => `
+                <tr class="hover:bg-slate-50 border-b">
+                    <td class="p-2.5 text-center text-slate-500">${idx+1}</td>
+                    <td class="p-2.5 font-bold text-blue-800">${r.code || '-'}</td>
+                    <td class="p-2.5">${r.name || '-'}</td>
+                    <td class="p-2.5 text-center">${r.unit || '-'}</td>
+                    <td class="p-2.5 text-center font-bold text-amber-700">${r.qty}</td>
+                    <td class="p-2.5 text-right text-emerald-700">${r.tonSv.toLocaleString()}</td>
+                    <td class="p-2.5 text-right font-bold text-indigo-700">${r.total.toLocaleString()}</td>
+                    <td class="p-2.5 text-right text-blue-700">${r.tonMisa.toLocaleString()}</td>
+                    <td class="p-2.5 text-right font-bold">${r.diff}</td>
+                    <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded text-[11px] font-bold ${r.status==='FAIL'?'badge-fail':r.status==='PASS'?'badge-pass':'badge-warn'}">${r.decision}</span></td>
+                    <td class="p-2.5 text-[11px] text-slate-600">${r.reason}</td>
+                </tr>
+            `).join('');
+        }
+
+        function exportResultExcel() {
+            if(currentOrderRows.length === 0) return;
+            const ws = XLSX.utils.json_to_sheet(currentOrderRows.map((r,i)=>({
+                'STT': i+1, 'Mã Hàng': r.code, 'Tên Hàng': r.name, 'ĐVT': r.unit,
+                'SL Đơn': r.qty, 'Tồn SV': r.tonSv, 'Tổng': r.total, 'Tồn MISA': r.tonMisa,
+                'Lệch': r.diff, 'Quyết Định': r.decision, 'Giải Thích': r.reason
+            })));
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "DoiSoat");
+            XLSX.writeFile(wb, "Ket_Qua_Doi_Soat.xlsx");
+        }
+    </script>
+</body>
+</html>
