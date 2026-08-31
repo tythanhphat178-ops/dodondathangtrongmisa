@@ -76,11 +76,11 @@
                     <input type="file" id="fileOrder" accept=".xlsx, .xls, .csv" class="block w-full text-xs text-slate-600 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-blue-600 file:text-white cursor-pointer">
                 </div>
                 <div class="p-3 bg-white rounded-xl border border-indigo-200">
-                    <label class="text-xs font-bold text-indigo-900 mb-1 block">Hoặc Dán bảng đơn hàng (Ctrl + V)</label>
+                    <label class="text-xs font-bold text-indigo-900 mb-1 block">Hoặc Dán bảng đơn hàng (Ctrl + V) / Tìm tên hoặc mã hàng</label>
                     <div class="flex gap-1.5">
-                        <textarea id="pasteOrderInput" rows="1" placeholder="Dán bảng đơn hàng hoặc gõ lẻ mã vào đây..." class="w-full text-xs font-mono border rounded p-1.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none"></textarea>
-                        <!-- Nút tìm mã -->
-                        <button onclick="handleSearchOrPaste()" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded shadow flex items-center gap-1 transition whitespace-nowrap">
+                        <textarea id="pasteOrderInput" rows="1" placeholder="Nhập tên hàng (vd: long đền), mã lẻ, hoặc dán bảng..." class="w-full text-xs font-mono border rounded p-1.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none"></textarea>
+                        <!-- Nút tìm kiếm -->
+                        <button onclick="handleSearchOrPaste()" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3.5 py-1.5 rounded shadow flex items-center gap-1 transition whitespace-nowrap">
                             <i class="fa-solid fa-magnifying-glass"></i> Tìm
                         </button>
                     </div>
@@ -144,6 +144,7 @@
 
             document.getElementById('fileOrder').addEventListener('change', e => handleOrderFile(e.target.files[0]));
             
+            // Xử lý dán bảng có phân tách tab
             document.getElementById('pasteOrderInput').addEventListener('input', e => {
                 const val = e.target.value.trim();
                 if (val && val.includes('\t')) {
@@ -151,6 +152,7 @@
                 }
             });
 
+            // Nhấn Enter để tìm kiếm mã hoặc tên hàng
             document.getElementById('pasteOrderInput').addEventListener('keydown', e => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -195,32 +197,86 @@
             recomputeAll();
         }
 
+        // Hàm chuẩn hóa tiếng Việt bỏ dấu để tìm kiếm thông minh
+        function normalizeStr(str) {
+            return (str || '')
+                .toString()
+                .toLowerCase()
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .replace(/đ/g, "d")
+                .trim();
+        }
+
+        // Tự động nhận diện Dán bảng / Tìm theo Tên hàng / Tìm theo Mã hàng
         function handleSearchOrPaste() {
             const raw = document.getElementById('pasteOrderInput').value.trim();
             if (!raw) return;
 
             if (raw.includes('\t')) {
                 parseOrderRows(raw.split('\n').map(l => l.split('\t')));
-            } else {
-                const codes = raw.split(/[\n,;\s]+/).map(c => c.trim()).filter(c => c.length > 0);
-                if (codes.length === 0) return;
+                return;
+            }
 
-                currentOrderRows = [];
-                orderRowSeq = 0;
-                codes.forEach(code => {
-                    const key = code.toLowerCase();
-                    const m = mapMisa.get(key);
-                    const s = mapSv.get(key);
+            const searchKey = normalizeStr(raw);
+            const matchedMap = new Map();
+
+            // 1. Quét tìm trong danh mục MISA
+            mapMisa.forEach((item, key) => {
+                const nameNorm = normalizeStr(item.name);
+                const codeNorm = normalizeStr(item.code);
+                if (codeNorm.includes(searchKey) || nameNorm.includes(searchKey)) {
+                    matchedMap.set(key, {
+                        code: item.code,
+                        name: item.name,
+                        unit: item.unit
+                    });
+                }
+            });
+
+            // 2. Quét tìm bổ sung trong danh mục SV
+            mapSv.forEach((item, key) => {
+                const nameNorm = normalizeStr(item.name);
+                const codeNorm = normalizeStr(item.code);
+                if (codeNorm.includes(searchKey) || nameNorm.includes(searchKey)) {
+                    if (!matchedMap.has(key)) {
+                        matchedMap.set(key, {
+                            code: item.code,
+                            name: item.name,
+                            unit: item.unit
+                        });
+                    }
+                }
+            });
+
+            currentOrderRows = [];
+            orderRowSeq = 0;
+
+            if (matchedMap.size > 0) {
+                matchedMap.forEach(item => {
                     currentOrderRows.push({
                         id: orderRowSeq++,
-                        code: code,
-                        name: m ? m.name : (s ? s.name : ''),
-                        unit: m ? m.unit : (s ? s.unit : ''),
+                        code: item.code,
+                        name: item.name,
+                        unit: item.unit,
                         qty: 1
                     });
                 });
-                recomputeAll();
+            } else {
+                // Nếu không tìm thấy trong dữ liệu kho, nạp dưới dạng mã tự nhập
+                const codes = raw.split(/[\n,;\s]+/).map(c => c.trim()).filter(c => c.length > 0);
+                codes.forEach(code => {
+                    currentOrderRows.push({
+                        id: orderRowSeq++,
+                        code: code,
+                        name: '',
+                        unit: '',
+                        qty: 1
+                    });
+                });
             }
+
+            recomputeAll();
         }
 
         function getLargestSheetRows(wb) {
