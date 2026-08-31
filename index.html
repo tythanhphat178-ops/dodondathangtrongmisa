@@ -21,7 +21,7 @@
                 <h1 class="text-lg md:text-xl font-bold flex items-center gap-2">
                     <i class="fa-solid fa-boxes-stacked text-yellow-400"></i> HỆ THỐNG ĐỐI SOÁT KHO ONLINE
                 </h1>
-                <p class="text-xs text-blue-200 mt-0.5">Đồng bộ trực tiếp qua GitHub API (Không bị dính cache)</p>
+                <p class="text-xs text-blue-200 mt-0.5">Đồng bộ trực tiếp qua GitHub API (Tra cứu Mã, Tên & Nhà Cung Cấp)</p>
             </div>
             <div class="flex items-center gap-2 text-xs">
                 <span id="statMisa" class="bg-blue-950 px-3 py-1.5 rounded-lg border border-blue-700">MISA: <b class="text-yellow-300">0</b> mã</span>
@@ -34,7 +34,7 @@
     </header>
 
     <main class="max-w-7xl mx-auto px-4 py-5 space-y-4">
-        <!-- Khung trạng thái & Nạp nhanh dự phòng -->
+        <!-- Trạng thái & nạp file thủ công -->
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 pb-3 border-b border-slate-100">
                 <div>
@@ -59,34 +59,52 @@
             </div>
         </div>
 
-        <!-- Khung nạp toa hàng cần dò -->
+        <!-- Khung nạp đơn hàng & Ô dò NCC riêng biệt -->
         <div class="bg-gradient-to-r from-blue-50 via-indigo-50 to-white rounded-xl shadow-sm border-2 border-blue-400 p-4">
-            <div class="flex justify-between items-center mb-2">
+            <div class="flex justify-between items-center mb-3">
                 <h2 class="text-sm font-bold text-blue-900 uppercase flex items-center gap-2">
-                    <i class="fa-solid fa-file-invoice text-blue-700"></i> Nạp Đơn Hàng / Toa Hàng Cần Dò
+                    <i class="fa-solid fa-file-invoice text-blue-700"></i> Nạp Đơn Hàng / Tra Cứu
                 </h2>
                 <button onclick="clearOrderData()" class="text-xs bg-rose-600 hover:bg-rose-700 text-white font-semibold px-2.5 py-1 rounded shadow flex items-center gap-1 transition">
-                    <i class="fa-solid fa-trash-can"></i> Xóa đơn nạp
+                    <i class="fa-solid fa-trash-can"></i> Xóa dữ liệu dò
                 </button>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <!-- Cột 1: File Excel -->
                 <div class="p-3 bg-white rounded-xl border border-blue-200">
-                    <label class="text-xs font-bold text-blue-900 mb-1 block">Chọn File Excel Đơn Hàng</label>
-                    <input type="file" id="fileOrder" accept=".xlsx, .xls, .csv" class="block w-full text-xs text-slate-600 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-blue-600 file:text-white cursor-pointer">
+                    <label class="text-xs font-bold text-blue-900 mb-1 block">1. File Excel Đơn Hàng</label>
+                    <input type="file" id="fileOrder" accept=".xlsx, .xls, .csv" class="block w-full text-xs text-slate-600 file:py-1.5 file:px-2.5 file:rounded file:border-0 file:bg-blue-600 file:text-white cursor-pointer">
                 </div>
+
+                <!-- Cột 2: Tìm theo Mã / Tên hàng -->
                 <div class="p-3 bg-white rounded-xl border border-indigo-200">
-                    <label class="text-xs font-bold text-indigo-900 mb-1 block">Hoặc Dán bảng đơn hàng (Ctrl + V) / Tìm chuẩn xác</label>
+                    <label class="text-xs font-bold text-indigo-900 mb-1 block">2. Dán đơn / Tìm Mã & Tên Hàng</label>
                     <div class="flex gap-1.5">
-                        <textarea id="pasteOrderInput" rows="1" placeholder="Gõ từ khóa (vd: de than su)..." class="w-full text-xs font-mono border rounded p-1.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none"></textarea>
-                        <button onclick="handleStrictSearchOrPaste()" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3.5 py-1.5 rounded shadow flex items-center gap-1 transition whitespace-nowrap">
-                            <i class="fa-solid fa-magnifying-glass"></i> Tìm
+                        <textarea id="pasteOrderInput" rows="1" placeholder="Dán bảng đơn hoặc gõ tên mã..." class="w-full text-xs font-mono border rounded p-1.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none"></textarea>
+                        <button onclick="handleStrictSearchOrPaste()" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded shadow flex items-center gap-1 transition whitespace-nowrap">
+                            <i class="fa-solid fa-magnifying-glass"></i> Dò
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Cột 3: Ô DÒ THEO NHÀ CUNG CẤP (NCC) -->
+                <div class="p-3 bg-white rounded-xl border-2 border-emerald-500 shadow-sm">
+                    <label class="text-xs font-bold text-emerald-800 mb-1 block flex items-center justify-between">
+                        <span><i class="fa-solid fa-truck-field"></i> 3. Dò Theo NCC</span>
+                        <span class="text-[11px] text-emerald-600 font-normal">Tự gán SL Đơn = 0</span>
+                    </label>
+                    <div class="flex gap-1.5">
+                        <input type="text" id="nccSearchInput" placeholder="Gõ tên NCC (vd: Honda, Denki)..." class="w-full text-xs font-mono border border-emerald-300 rounded p-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                        <button onclick="handleSearchByNCC()" class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded shadow flex items-center gap-1 transition whitespace-nowrap">
+                            <i class="fa-solid fa-filter"></i> Dò NCC
                         </button>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Khung kết quả -->
+        <!-- Khung kết quả đối soát -->
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-3 pb-2 border-b">
                 <div class="flex flex-wrap items-center gap-2">
@@ -100,16 +118,19 @@
                     </div>
                 </div>
                 <button onclick="exportResultExcel()" id="btnExport" class="text-xs bg-emerald-600 text-white font-semibold px-4 py-1.5 rounded-lg shadow disabled:opacity-50" disabled>
-                    <i class="fa-solid fa-file-excel"></i> Tải Báo Cáo (.xlsx)
+                    <i class="fa-solid fa-file-excel"></i> Tải Toàn Bộ Báo Cáo (.xlsx)
                 </button>
             </div>
-            <div class="overflow-x-auto max-h-[500px]">
+
+            <!-- Bảng dữ liệu -->
+            <div class="overflow-x-auto max-h-[550px]">
                 <table class="w-full text-xs text-left border">
-                    <thead class="bg-slate-100 uppercase sticky top-0">
+                    <thead class="bg-slate-100 uppercase sticky top-0 z-10 shadow-sm">
                         <tr>
                             <th class="p-2.5 border text-center">STT</th>
                             <th class="p-2.5 border">Mã Hàng</th>
                             <th class="p-2.5 border">Tên Hàng Hóa</th>
+                            <th class="p-2.5 border text-center">NCC</th>
                             <th class="p-2.5 border text-center">ĐVT</th>
                             <th class="p-2.5 border text-center">SL Đơn</th>
                             <th class="p-2.5 border text-right">Tồn SV</th>
@@ -121,9 +142,18 @@
                         </tr>
                     </thead>
                     <tbody id="resultTbody">
-                        <tr><td colspan="11" class="p-6 text-center text-slate-400 italic">Chưa có dữ liệu đơn hàng.</td></tr>
+                        <tr><td colspan="12" class="p-6 text-center text-slate-400 italic">Chưa có dữ liệu đơn hàng hoặc từ khóa tra cứu.</td></tr>
                     </tbody>
                 </table>
+            </div>
+
+            <!-- Thanh phân trang (Pagination) -->
+            <div id="paginationBar" class="flex justify-between items-center mt-3 pt-3 border-t text-xs text-slate-600 hidden">
+                <span id="pageInfo">Trang 1 / 1</span>
+                <div class="flex gap-1.5">
+                    <button onclick="changePage(-1)" id="btnPrevPage" class="px-3 py-1 border rounded bg-slate-50 hover:bg-slate-200 disabled:opacity-40 font-semibold">« Trang trước</button>
+                    <button onclick="changePage(1)" id="btnNextPage" class="px-3 py-1 border rounded bg-slate-50 hover:bg-slate-200 disabled:opacity-40 font-semibold">Trang sau »</button>
+                </div>
             </div>
         </div>
     </main>
@@ -133,10 +163,14 @@
         const GITHUB_REPO = "dodondathangtrongmisa";      
         let mapMisa = new Map();
         let mapSv = new Map();
+        let mapNcc = new Map();
         let currentOrderRows = [];
         let currentFilter = 'ALL';
         let orderRowSeq = 0;
         let searchDebounce = null;
+        let nccDebounce = null;
+        let currentPage = 1;
+        const PAGE_SIZE = 100;
 
         window.addEventListener('DOMContentLoaded', () => {
             forceSyncFromGitHub();
@@ -152,7 +186,7 @@
                 clearTimeout(searchDebounce);
                 searchDebounce = setTimeout(() => {
                     handleStrictSearchOrPaste();
-                }, 200);
+                }, 250);
             });
 
             document.getElementById('pasteOrderInput').addEventListener('keydown', e => {
@@ -163,15 +197,30 @@
                 }
             });
 
+            document.getElementById('nccSearchInput').addEventListener('input', e => {
+                clearTimeout(nccDebounce);
+                nccDebounce = setTimeout(() => {
+                    handleSearchByNCC();
+                }, 300);
+            });
+
+            document.getElementById('nccSearchInput').addEventListener('keydown', e => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    clearTimeout(nccDebounce);
+                    handleSearchByNCC();
+                }
+            });
+
             document.getElementById('localMisa').addEventListener('change', e => {
                 const f = e.target.files[0];
                 if (!f) return;
                 const r = new FileReader();
                 r.onload = ev => {
                     const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
-                    parseMisaDirect(getLargestSheetRows(wb));
+                    parseMisaDirect(wb);
                     updateStats();
-                    if(currentOrderRows.length > 0) recomputeAll();
+                    if(currentOrderRows.length > 0) recomputeAll(false);
                     document.getElementById('syncStatus').innerHTML = `<span class="text-emerald-700 font-bold"><i class="fa-solid fa-check"></i> Đã nạp trực tiếp file MISA (${mapMisa.size.toLocaleString()} mã)</span>`;
                 };
                 r.readAsArrayBuffer(f);
@@ -183,10 +232,10 @@
                 const r = new FileReader();
                 r.onload = ev => {
                     const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
-                    parseSvDirect(getLargestSheetRows(wb));
+                    parseSvDirect(wb);
                     updateStats();
-                    if(currentOrderRows.length > 0) recomputeAll();
-                    document.getElementById('syncStatus').innerHTML = `<span class="text-emerald-700 font-bold"><i class="fa-solid fa-check"></i> Đã nạp trực tiếp file SV (${mapSv.size.toLocaleString()} mã)</span>`;
+                    if(currentOrderRows.length > 0) recomputeAll(false);
+                    document.getElementById('syncStatus').innerHTML = `<span class="text-emerald-700 font-bold"><i class="fa-solid fa-check"></i> Đã nạp trực tiếp file SV (${mapSv.size.toLocaleString()} mã, ${mapNcc.size.toLocaleString()} mã có NCC)</span>`;
                 };
                 r.readAsArrayBuffer(f);
             });
@@ -195,12 +244,13 @@
         function clearOrderData() {
             currentOrderRows = [];
             orderRowSeq = 0;
+            currentPage = 1;
             document.getElementById('fileOrder').value = '';
             document.getElementById('pasteOrderInput').value = '';
+            document.getElementById('nccSearchInput').value = '';
             recomputeAll();
         }
 
-        // Tách chuỗi thành danh sách các từ độc lập chuẩn hóa
         function tokenize(str) {
             return (str || '')
                 .toString()
@@ -213,14 +263,66 @@
                 .filter(t => t.length > 0);
         }
 
-        // Thuật toán: Khớp chính xác từng từ đơn (Exact Whole Word Matching)
-        function handleStrictSearchOrPaste() {
-            const raw = document.getElementById('pasteOrderInput').value.trim();
+        function normalizeStr(str) {
+            return (str || '')
+                .toString()
+                .toLowerCase()
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .replace(/đ/g, "d")
+                .trim();
+        }
+
+        // HÀM DÒ THEO NCC TỪ MAP ĐÃ QUÉT
+        function handleSearchByNCC() {
+            const raw = document.getElementById('nccSearchInput').value.trim();
+            currentPage = 1;
             if (!raw) {
                 currentOrderRows = [];
                 recomputeAll();
                 return;
             }
+
+            document.getElementById('pasteOrderInput').value = '';
+            const searchNormalized = normalizeStr(raw);
+
+            currentOrderRows = [];
+            orderRowSeq = 0;
+
+            mapNcc.forEach((nccName, codeLower) => {
+                const nccNorm = normalizeStr(nccName);
+                if (nccNorm.includes(searchNormalized)) {
+                    const s = mapSv.get(codeLower);
+                    const m = mapMisa.get(codeLower);
+
+                    const code = s ? s.code : (m ? m.code : codeLower.toUpperCase());
+                    const name = s ? s.name : (m ? m.name : '');
+                    const unit = s ? s.unit : (m ? m.unit : '');
+
+                    currentOrderRows.push({
+                        id: orderRowSeq++,
+                        code: code,
+                        name: name,
+                        unit: unit,
+                        ncc: nccName,
+                        qty: 0
+                    });
+                }
+            });
+
+            recomputeAll();
+        }
+
+        function handleStrictSearchOrPaste() {
+            const raw = document.getElementById('pasteOrderInput').value.trim();
+            currentPage = 1;
+            if (!raw) {
+                currentOrderRows = [];
+                recomputeAll();
+                return;
+            }
+
+            document.getElementById('nccSearchInput').value = '';
 
             if (raw.includes('\t')) {
                 parseOrderRows(raw.split('\n').map(l => l.split('\t')));
@@ -232,11 +334,14 @@
 
             const allItemsMap = new Map();
             mapMisa.forEach((item, key) => {
-                allItemsMap.set(key, { code: item.code, name: item.name, unit: item.unit });
+                allItemsMap.set(key, { code: item.code, name: item.name, unit: item.unit, ncc: mapNcc.get(key) || '' });
             });
             mapSv.forEach((item, key) => {
+                const nccVal = item.ncc || mapNcc.get(key) || '';
                 if (!allItemsMap.has(key)) {
-                    allItemsMap.set(key, { code: item.code, name: item.name, unit: item.unit });
+                    allItemsMap.set(key, { code: item.code, name: item.name, unit: item.unit, ncc: nccVal });
+                } else if (!allItemsMap.get(key).ncc) {
+                    allItemsMap.get(key).ncc = nccVal;
                 }
             });
 
@@ -248,10 +353,7 @@
                 const nameTokens = tokenize(item.name);
                 const itemTokens = [...codeTokens, ...nameTokens];
 
-                // Bắt buộc tất cả từ tìm kiếm phải là TỪ TRỌN VẸN (chính xác 100%) trong tên hàng hoặc mã hàng
-                const isExactAllTokens = searchTokens.every(sToken => {
-                    return itemTokens.includes(sToken);
-                });
+                const isExactAllTokens = searchTokens.every(sToken => itemTokens.includes(sToken));
 
                 if (isExactAllTokens) {
                     let score = 0;
@@ -261,8 +363,6 @@
                     if (cleanCode === rawSearchClean) score += 200;
                     if (cleanName === rawSearchClean) score += 150;
                     if (cleanName.startsWith(rawSearchClean)) score += 80;
-
-                    // Ưu tiên tên ngắn, ít từ dư thừa
                     score += Math.max(0, 50 - itemTokens.length * 2);
 
                     matchedList.push({ item, score });
@@ -281,7 +381,8 @@
                         code: res.item.code,
                         name: res.item.name,
                         unit: res.item.unit,
-                        qty: 1
+                        ncc: res.item.ncc,
+                        qty: 0
                     });
                 });
             } else {
@@ -292,26 +393,13 @@
                         code: code,
                         name: '',
                         unit: '',
-                        qty: 1
+                        ncc: mapNcc.get(code.toLowerCase()) || '',
+                        qty: 0
                     });
                 });
             }
 
             recomputeAll();
-        }
-
-        function getLargestSheetRows(wb) {
-            let maxRows = 0;
-            let bestRows = [];
-            for (let name of wb.SheetNames) {
-                let sheet = wb.Sheets[name];
-                let rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-                if (rows.length > maxRows) {
-                    maxRows = rows.length;
-                    bestRows = rows;
-                }
-            }
-            return bestRows;
         }
 
         const GITHUB_BRANCHES = ['main'];
@@ -414,7 +502,7 @@
 
                 if (bufMisa) {
                     const wbMisa = XLSX.read(new Uint8Array(bufMisa), { type: 'array' });
-                    parseMisaDirect(getLargestSheetRows(wbMisa));
+                    parseMisaDirect(wbMisa);
                     loaded++;
                 } else {
                     missing.push('misa.xlsx');
@@ -422,7 +510,7 @@
 
                 if (bufSv) {
                     const wbSv = XLSX.read(new Uint8Array(bufSv), { type: 'array' });
-                    parseSvDirect(getLargestSheetRows(wbSv));
+                    parseSvDirect(wbSv);
                     loaded++;
                 } else {
                     missing.push('sv.xlsx');
@@ -439,11 +527,11 @@
                 lastSvSig = sigSv;
 
                 if (loaded === 2) {
-                    syncEl.innerHTML = `<span class="text-emerald-700 font-bold"><i class="fa-solid fa-circle-check"></i> Đã đồng bộ mới nhất (${mapSv.size.toLocaleString()} mã SV, ${mapMisa.size.toLocaleString()} mã MISA)</span>`;
-                    if(currentOrderRows.length > 0) recomputeAll();
+                    syncEl.innerHTML = `<span class="text-emerald-700 font-bold"><i class="fa-solid fa-circle-check"></i> Đã đồng bộ mới nhất (${mapSv.size.toLocaleString()} mã SV, ${mapMisa.size.toLocaleString()} mã MISA, ${mapNcc.size.toLocaleString()} mã có NCC)</span>`;
+                    if(currentOrderRows.length > 0) recomputeAll(false);
                 } else if (loaded === 1) {
                     syncEl.innerHTML = `<span class="text-amber-700"><i class="fa-solid fa-triangle-exclamation"></i> Chỉ tải được ${2-missing.length}/2 file. Không tìm thấy: <b>${missing.join(', ')}</b> trên GitHub.</span>`;
-                    if(currentOrderRows.length > 0) recomputeAll();
+                    if(currentOrderRows.length > 0) recomputeAll(false);
                 } else {
                     syncEl.innerHTML = `<span class="text-red-700"><i class="fa-solid fa-circle-xmark"></i> Không tải được misa.xlsx và sv.xlsx từ GitHub.</span>`;
                 }
@@ -457,8 +545,12 @@
             document.getElementById('statSv').innerHTML = `SV: <b class="text-yellow-300">${mapSv.size.toLocaleString()}</b> mã`;
         }
 
-        function parseMisaDirect(rows) {
+        function parseMisaDirect(wb) {
             mapMisa.clear();
+            let sheetName = wb.SheetNames[0];
+            let sheet = wb.Sheets[sheetName];
+            let rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
             if (!rows || rows.length === 0) return;
             for (let i = 0; i < rows.length; i++) {
                 const r = rows[i];
@@ -476,9 +568,52 @@
             }
         }
 
-        function parseSvDirect(rows) {
+        function parseSvDirect(wb) {
             mapSv.clear();
-            if (!rows || rows.length === 0) return;
+            mapNcc.clear();
+
+            // 1. Quét toàn bộ sheet NCC (nhận diện tên sheet dù có dấu hay không dấu)
+            for (let name of wb.SheetNames) {
+                const nameNorm = normalizeStr(name); // vd: "Nhà Cung Cấp" -> "nha cung cap"
+                if (nameNorm.includes('ncc') || nameNorm.includes('nha cung cap')) {
+                    let sheet = wb.Sheets[name];
+                    let rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+                    if (!rows || rows.length === 0) continue;
+
+                    // Tự dò vị trí cột "Mã hàng" và cột "NCC/Nhà cung cấp" dựa vào dòng tiêu đề (dòng 1)
+                    let colCode = 0, colNcc = 1;
+                    const headerRow = rows[0] || [];
+                    let foundCode = false, foundNcc = false;
+                    headerRow.forEach((h, idx) => {
+                        const hNorm = normalizeStr(h);
+                        if (!foundCode && (hNorm.includes('ma hang') || hNorm.includes('ma vat tu') || hNorm === 'ma')) {
+                            colCode = idx; foundCode = true;
+                        }
+                        if (!foundNcc && (hNorm.includes('ncc') || hNorm.includes('nha cung cap'))) {
+                            colNcc = idx; foundNcc = true;
+                        }
+                    });
+                    // Nếu không dò được tiêu đề, giữ mặc định cột A = mã, cột B = NCC
+
+                    for (let i = 1; i < rows.length; i++) {
+                        const r = rows[i];
+                        if (!r || r.length === 0) continue;
+                        let code = (r[colCode] !== undefined && r[colCode] !== null ? r[colCode].toString() : '').trim();
+                        let ncc = (r[colNcc] !== undefined && r[colNcc] !== null ? r[colNcc].toString() : '').trim();
+                        let lowerCode = code.toLowerCase();
+                        const codeNorm = normalizeStr(code);
+                        if (code && !codeNorm.includes('ma vat tu') && !codeNorm.includes('ma hang') && ncc) {
+                            mapNcc.set(lowerCode, ncc);
+                        }
+                    }
+                }
+            }
+
+            // 2. Đọc sheet Tồn kho SV
+            let tonSheetName = wb.SheetNames.find(n => !n.toUpperCase().includes('NCC')) || wb.SheetNames[0];
+            let sheet = wb.Sheets[tonSheetName];
+            let rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
             for (let i = 0; i < rows.length; i++) {
                 const r = rows[i];
                 if (!r || r.length === 0) continue;
@@ -491,7 +626,8 @@
                 let tonStr = (r[6] !== undefined && r[6] !== null ? r[6].toString() : '0').replace(/,/g, '').trim();
                 let tonSv = parseFloat(tonStr) || 0;
 
-                mapSv.set(lowerCode, { code, name, unit, tonSv });
+                let ncc = mapNcc.get(lowerCode) || '';
+                mapSv.set(lowerCode, { code, name, unit, tonSv, ncc });
             }
         }
 
@@ -501,7 +637,9 @@
             reader.onload = e => {
                 const data = new Uint8Array(e.target.result);
                 const wb = XLSX.read(data, { type: 'array' });
-                parseOrderRows(getLargestSheetRows(wb));
+                let sheet = wb.Sheets[wb.SheetNames[0]];
+                let rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+                parseOrderRows(rows);
             };
             reader.readAsArrayBuffer(file);
         }
@@ -509,6 +647,7 @@
         function parseOrderRows(rows) {
             currentOrderRows = [];
             orderRowSeq = 0;
+            currentPage = 1;
             for(let i = 1; i < rows.length; i++) {
                 const r = rows[i];
                 if(!r || r.length === 0) continue;
@@ -520,7 +659,8 @@
                     : '1';
                 let qty = parseFloat(qtyRaw);
                 if (isNaN(qty)) qty = 1;
-                if(code || name) currentOrderRows.push({ id: orderRowSeq++, code, name, unit, qty });
+                const ncc = mapNcc.get(code.toLowerCase()) || '';
+                if(code || name) currentOrderRows.push({ id: orderRowSeq++, code, name, unit, ncc, qty });
             }
             recomputeAll();
         }
@@ -532,11 +672,12 @@
             const row = currentOrderRows.find(r => r.id === id);
             if (row) {
                 row.qty = val;
-                recomputeAll();
+                recomputeAll(false);
             }
         }
 
-        function recomputeAll() {
+        function recomputeAll(resetPage = true) {
+            if (resetPage) currentPage = 1;
             currentOrderRows.forEach(r => {
                 const key = r.code.toLowerCase().trim();
                 const m = mapMisa.get(key);
@@ -544,6 +685,7 @@
 
                 if (!r.name && (m || s)) r.name = m ? m.name : s.name;
                 if (!r.unit && (m || s)) r.unit = m ? m.unit : s.unit;
+                r.ncc = r.ncc || mapNcc.get(key) || (s ? s.ncc : '') || '';
 
                 r.tonMisa = m ? m.tonMisa : 0;
                 r.tonSv = s ? s.tonSv : 0;
@@ -560,6 +702,7 @@
 
         function setFilter(status) {
             currentFilter = status;
+            currentPage = 1;
             ['All', 'Pass', 'Fail', 'Warn'].forEach(s => {
                 const btn = document.getElementById('filter' + s);
                 if (s.toUpperCase() === status || (status === 'ALL' && s === 'All')) {
@@ -571,25 +714,41 @@
             renderTable();
         }
 
+        function changePage(delta) {
+            currentPage += delta;
+            renderTable();
+        }
+
         function renderTable() {
             const tbody = document.getElementById('resultTbody');
+            const paginationBar = document.getElementById('paginationBar');
             const filteredRows = currentOrderRows.filter(r => {
                 if (currentFilter === 'ALL') return true;
                 return r.status === currentFilter;
             });
 
-            document.getElementById('resultCount').innerText = `${filteredRows.length} / ${currentOrderRows.length}`;
+            document.getElementById('resultCount').innerText = `${filteredRows.length.toLocaleString()} / ${currentOrderRows.length.toLocaleString()}`;
 
             if(filteredRows.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="11" class="p-6 text-center text-slate-400 italic">Không có mã nào phù hợp với bộ lọc này.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="12" class="p-6 text-center text-slate-400 italic">Không có mã nào phù hợp với bộ lọc này.</td></tr>`;
+                paginationBar.classList.add('hidden');
                 return;
             }
 
-            tbody.innerHTML = filteredRows.map((r, idx) => `
+            const totalPages = Math.ceil(filteredRows.length / PAGE_SIZE) || 1;
+            if (currentPage > totalPages) currentPage = totalPages;
+            if (currentPage < 1) currentPage = 1;
+
+            const startIdx = (currentPage - 1) * PAGE_SIZE;
+            const endIdx = startIdx + PAGE_SIZE;
+            const pageRows = filteredRows.slice(startIdx, endIdx);
+
+            tbody.innerHTML = pageRows.map((r, idx) => `
                 <tr class="hover:bg-slate-50 border-b">
-                    <td class="p-2.5 text-center text-slate-500">${idx+1}</td>
+                    <td class="p-2.5 text-center text-slate-500">${startIdx + idx + 1}</td>
                     <td class="p-2.5 font-bold text-blue-800">${r.code || '-'}</td>
                     <td class="p-2.5">${r.name || '-'}</td>
+                    <td class="p-2.5 text-center font-medium text-slate-700">${r.ncc || '-'}</td>
                     <td class="p-2.5 text-center">${r.unit || '-'}</td>
                     <td class="p-2.5 text-center">
                         <input type="number" min="0" step="1" value="${r.qty}" data-id="${r.id}"
@@ -604,12 +763,21 @@
                     <td class="p-2.5 text-[11px] text-slate-600">${r.reason}</td>
                 </tr>
             `).join('');
+
+            if (filteredRows.length > PAGE_SIZE) {
+                paginationBar.classList.remove('hidden');
+                document.getElementById('pageInfo').innerText = `Trang ${currentPage} / ${totalPages} (Hiển thị ${startIdx + 1} - ${Math.min(endIdx, filteredRows.length)} trong tổng số ${filteredRows.length.toLocaleString()} mã)`;
+                document.getElementById('btnPrevPage').disabled = currentPage <= 1;
+                document.getElementById('btnNextPage').disabled = currentPage >= totalPages;
+            } else {
+                paginationBar.classList.add('hidden');
+            }
         }
 
         function exportResultExcel() {
             if(currentOrderRows.length === 0) return;
             const ws = XLSX.utils.json_to_sheet(currentOrderRows.map((r,i)=>({
-                'STT': i+1, 'Mã Hàng': r.code, 'Tên Hàng': r.name, 'ĐVT': r.unit,
+                'STT': i+1, 'Mã Hàng': r.code, 'Tên Hàng': r.name, 'NCC': r.ncc, 'ĐVT': r.unit,
                 'SL Đơn': r.qty, 'Tồn SV': r.tonSv, 'Tổng': r.total, 'Tồn MISA': r.tonMisa,
                 'Lệch': r.diff, 'Quyết Định': r.decision, 'Giải Thích': r.reason
             })));
