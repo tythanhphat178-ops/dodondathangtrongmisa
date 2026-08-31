@@ -65,7 +65,6 @@
                 <h2 class="text-sm font-bold text-blue-900 uppercase flex items-center gap-2">
                     <i class="fa-solid fa-file-invoice text-blue-700"></i> Nạp Đơn Hàng / Toa Hàng Cần Dò
                 </h2>
-                <!-- Nút xóa đơn nạp -->
                 <button onclick="clearOrderData()" class="text-xs bg-rose-600 hover:bg-rose-700 text-white font-semibold px-2.5 py-1 rounded shadow flex items-center gap-1 transition">
                     <i class="fa-solid fa-trash-can"></i> Xóa đơn nạp
                 </button>
@@ -76,11 +75,10 @@
                     <input type="file" id="fileOrder" accept=".xlsx, .xls, .csv" class="block w-full text-xs text-slate-600 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-blue-600 file:text-white cursor-pointer">
                 </div>
                 <div class="p-3 bg-white rounded-xl border border-indigo-200">
-                    <label class="text-xs font-bold text-indigo-900 mb-1 block">Hoặc Dán bảng đơn hàng (Ctrl + V) / Tìm tên hoặc mã hàng</label>
+                    <label class="text-xs font-bold text-indigo-900 mb-1 block">Hoặc Dán bảng đơn hàng (Ctrl + V) / Tìm chuẩn xác</label>
                     <div class="flex gap-1.5">
-                        <textarea id="pasteOrderInput" rows="1" placeholder="Nhập tên hàng (vd: long đền), mã lẻ, hoặc dán bảng..." class="w-full text-xs font-mono border rounded p-1.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none"></textarea>
-                        <!-- Nút tìm kiếm -->
-                        <button onclick="handleSearchOrPaste()" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3.5 py-1.5 rounded shadow flex items-center gap-1 transition whitespace-nowrap">
+                        <textarea id="pasteOrderInput" rows="1" placeholder="Gõ từ khóa (vd: de than su)..." class="w-full text-xs font-mono border rounded p-1.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none"></textarea>
+                        <button onclick="handleStrictSearchOrPaste()" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3.5 py-1.5 rounded shadow flex items-center gap-1 transition whitespace-nowrap">
                             <i class="fa-solid fa-magnifying-glass"></i> Tìm
                         </button>
                     </div>
@@ -138,25 +136,30 @@
         let currentOrderRows = [];
         let currentFilter = 'ALL';
         let orderRowSeq = 0;
+        let searchDebounce = null;
 
         window.addEventListener('DOMContentLoaded', () => {
             forceSyncFromGitHub();
 
             document.getElementById('fileOrder').addEventListener('change', e => handleOrderFile(e.target.files[0]));
             
-            // Xử lý dán bảng có phân tách tab
             document.getElementById('pasteOrderInput').addEventListener('input', e => {
                 const val = e.target.value.trim();
-                if (val && val.includes('\t')) {
-                    handleSearchOrPaste();
+                if (val.includes('\t')) {
+                    handleStrictSearchOrPaste();
+                    return;
                 }
+                clearTimeout(searchDebounce);
+                searchDebounce = setTimeout(() => {
+                    handleStrictSearchOrPaste();
+                }, 200);
             });
 
-            // Nhấn Enter để tìm kiếm mã hoặc tên hàng
             document.getElementById('pasteOrderInput').addEventListener('keydown', e => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    handleSearchOrPaste();
+                    clearTimeout(searchDebounce);
+                    handleStrictSearchOrPaste();
                 }
             });
 
@@ -197,73 +200,91 @@
             recomputeAll();
         }
 
-        // Hàm chuẩn hóa tiếng Việt bỏ dấu để tìm kiếm thông minh
-        function normalizeStr(str) {
+        // Tách chuỗi thành danh sách các từ độc lập chuẩn hóa
+        function tokenize(str) {
             return (str || '')
                 .toString()
                 .toLowerCase()
                 .normalize("NFD")
                 .replace(/[\u0300-\u036f]/g, "")
                 .replace(/đ/g, "d")
-                .trim();
+                .replace(/[^a-z0-9]/g, " ")
+                .split(/\s+/)
+                .filter(t => t.length > 0);
         }
 
-        // Tự động nhận diện Dán bảng / Tìm theo Tên hàng / Tìm theo Mã hàng
-        function handleSearchOrPaste() {
+        // Thuật toán: Khớp chính xác từng từ đơn (Exact Whole Word Matching)
+        function handleStrictSearchOrPaste() {
             const raw = document.getElementById('pasteOrderInput').value.trim();
-            if (!raw) return;
+            if (!raw) {
+                currentOrderRows = [];
+                recomputeAll();
+                return;
+            }
 
             if (raw.includes('\t')) {
                 parseOrderRows(raw.split('\n').map(l => l.split('\t')));
                 return;
             }
 
-            const searchKey = normalizeStr(raw);
-            const matchedMap = new Map();
+            const searchTokens = tokenize(raw);
+            if (searchTokens.length === 0) return;
 
-            // 1. Quét tìm trong danh mục MISA
+            const allItemsMap = new Map();
             mapMisa.forEach((item, key) => {
-                const nameNorm = normalizeStr(item.name);
-                const codeNorm = normalizeStr(item.code);
-                if (codeNorm.includes(searchKey) || nameNorm.includes(searchKey)) {
-                    matchedMap.set(key, {
-                        code: item.code,
-                        name: item.name,
-                        unit: item.unit
-                    });
+                allItemsMap.set(key, { code: item.code, name: item.name, unit: item.unit });
+            });
+            mapSv.forEach((item, key) => {
+                if (!allItemsMap.has(key)) {
+                    allItemsMap.set(key, { code: item.code, name: item.name, unit: item.unit });
                 }
             });
 
-            // 2. Quét tìm bổ sung trong danh mục SV
-            mapSv.forEach((item, key) => {
-                const nameNorm = normalizeStr(item.name);
-                const codeNorm = normalizeStr(item.code);
-                if (codeNorm.includes(searchKey) || nameNorm.includes(searchKey)) {
-                    if (!matchedMap.has(key)) {
-                        matchedMap.set(key, {
-                            code: item.code,
-                            name: item.name,
-                            unit: item.unit
-                        });
-                    }
+            const matchedList = [];
+            const rawSearchClean = searchTokens.join(' ');
+
+            allItemsMap.forEach(item => {
+                const codeTokens = tokenize(item.code);
+                const nameTokens = tokenize(item.name);
+                const itemTokens = [...codeTokens, ...nameTokens];
+
+                // Bắt buộc tất cả từ tìm kiếm phải là TỪ TRỌN VẸN (chính xác 100%) trong tên hàng hoặc mã hàng
+                const isExactAllTokens = searchTokens.every(sToken => {
+                    return itemTokens.includes(sToken);
+                });
+
+                if (isExactAllTokens) {
+                    let score = 0;
+                    const cleanName = nameTokens.join(' ');
+                    const cleanCode = codeTokens.join(' ');
+
+                    if (cleanCode === rawSearchClean) score += 200;
+                    if (cleanName === rawSearchClean) score += 150;
+                    if (cleanName.startsWith(rawSearchClean)) score += 80;
+
+                    // Ưu tiên tên ngắn, ít từ dư thừa
+                    score += Math.max(0, 50 - itemTokens.length * 2);
+
+                    matchedList.push({ item, score });
                 }
             });
+
+            matchedList.sort((a, b) => b.score - a.score);
 
             currentOrderRows = [];
             orderRowSeq = 0;
 
-            if (matchedMap.size > 0) {
-                matchedMap.forEach(item => {
+            if (matchedList.length > 0) {
+                matchedList.forEach(res => {
                     currentOrderRows.push({
                         id: orderRowSeq++,
-                        code: item.code,
-                        name: item.name,
-                        unit: item.unit,
+                        code: res.item.code,
+                        name: res.item.name,
+                        unit: res.item.unit,
                         qty: 1
                     });
                 });
             } else {
-                // Nếu không tìm thấy trong dữ liệu kho, nạp dưới dạng mã tự nhập
                 const codes = raw.split(/[\n,;\s]+/).map(c => c.trim()).filter(c => c.length > 0);
                 codes.forEach(code => {
                     currentOrderRows.push({
