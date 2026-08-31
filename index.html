@@ -59,13 +59,13 @@
             </div>
         </div>
 
-        <!-- Khung nạp toa hàng cần dò -->
+        <!-- Khung nạp toa hàng cần dò (Giữ nguyên cấu trúc khung, thêm nút Tìm & Xóa) -->
         <div class="bg-gradient-to-r from-blue-50 via-indigo-50 to-white rounded-xl shadow-sm border-2 border-blue-400 p-4">
             <div class="flex justify-between items-center mb-2">
                 <h2 class="text-sm font-bold text-blue-900 uppercase flex items-center gap-2">
                     <i class="fa-solid fa-file-invoice text-blue-700"></i> Nạp Đơn Hàng / Toa Hàng Cần Dò
                 </h2>
-                <!-- Nút xóa đơn nạp -->
+                <!-- Nút xóa nạp đơn hàng -->
                 <button onclick="clearOrderData()" class="text-xs bg-rose-600 hover:bg-rose-700 text-white font-semibold px-2.5 py-1 rounded shadow flex items-center gap-1 transition">
                     <i class="fa-solid fa-trash-can"></i> Xóa đơn nạp
                 </button>
@@ -79,7 +79,7 @@
                     <label class="text-xs font-bold text-indigo-900 mb-1 block">Hoặc Dán bảng đơn hàng (Ctrl + V)</label>
                     <div class="flex gap-1.5">
                         <textarea id="pasteOrderInput" rows="1" placeholder="Dán bảng đơn hàng hoặc gõ lẻ mã vào đây..." class="w-full text-xs font-mono border rounded p-1.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none"></textarea>
-                        <!-- Nút tìm mã -->
+                        <!-- Nút tìm mã lẻ/dán -->
                         <button onclick="handleSearchOrPaste()" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded shadow flex items-center gap-1 transition whitespace-nowrap">
                             <i class="fa-solid fa-magnifying-glass"></i> Tìm
                         </button>
@@ -144,6 +144,7 @@
 
             document.getElementById('fileOrder').addEventListener('change', e => handleOrderFile(e.target.files[0]));
             
+            // Xử lý khi dán hoặc gõ vào ô
             document.getElementById('pasteOrderInput').addEventListener('input', e => {
                 const val = e.target.value.trim();
                 if (val && val.includes('\t')) {
@@ -151,6 +152,7 @@
                 }
             });
 
+            // Hỗ trợ bấm phím Enter để tìm mã lẻ
             document.getElementById('pasteOrderInput').addEventListener('keydown', e => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -187,6 +189,7 @@
             });
         });
 
+        // Xóa sạch dữ liệu nạp đơn hàng
         function clearOrderData() {
             currentOrderRows = [];
             orderRowSeq = 0;
@@ -195,13 +198,16 @@
             recomputeAll();
         }
 
+        // Tự động nhận diện dán nguyên bảng hoặc dán lẻ từng mã
         function handleSearchOrPaste() {
             const raw = document.getElementById('pasteOrderInput').value.trim();
             if (!raw) return;
 
             if (raw.includes('\t')) {
+                // Dán bảng có nhiều cột từ Excel
                 parseOrderRows(raw.split('\n').map(l => l.split('\t')));
             } else {
+                // Dán lẻ từng mã (tách bằng xuống dòng, phẩy hoặc khoảng trắng)
                 const codes = raw.split(/[\n,;\s]+/).map(c => c.trim()).filter(c => c.length > 0);
                 if (codes.length === 0) return;
 
@@ -504,7 +510,7 @@
             document.getElementById('resultCount').innerText = `${filteredRows.length} / ${currentOrderRows.length}`;
 
             if(filteredRows.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="11" class="p-6 text-center text-slate-400 italic">Không có mã nào phù hợp với bộ lọc này.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="11" class="p-6 text-center text-slate-400 italic">Chưa có dữ liệu đơn hàng.</td></tr>`;
                 return;
             }
 
