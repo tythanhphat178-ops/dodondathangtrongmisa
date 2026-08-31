@@ -369,8 +369,11 @@
             reader.readAsArrayBuffer(file);
         }
 
+        let orderRowSeq = 0;
+
         function parseOrderRows(rows) {
             currentOrderRows = [];
+            orderRowSeq = 0;
             for(let i = 1; i < rows.length; i++) {
                 const r = rows[i];
                 if(!r || r.length === 0) continue;
@@ -378,9 +381,20 @@
                 const name = (r[1] || '').toString().trim();
                 const unit = (r[2] || '').toString().trim();
                 const qty = parseFloat((r[3] || '1').toString().replace(/,/g,'')) || 1;
-                if(code || name) currentOrderRows.push({ code, name, unit, qty });
+                if(code || name) currentOrderRows.push({ id: orderRowSeq++, code, name, unit, qty });
             }
             recomputeAll();
+        }
+
+        function updateQty(inputEl) {
+            const id = parseInt(inputEl.dataset.id, 10);
+            let val = parseFloat((inputEl.value || '0').toString().replace(/,/g, ''));
+            if (isNaN(val) || val < 0) val = 0;
+            const row = currentOrderRows.find(r => r.id === id);
+            if (row) {
+                row.qty = val;
+                recomputeAll();
+            }
         }
 
         function recomputeAll() {
@@ -434,7 +448,11 @@
                     <td class="p-2.5 font-bold text-blue-800">${r.code || '-'}</td>
                     <td class="p-2.5">${r.name || '-'}</td>
                     <td class="p-2.5 text-center">${r.unit || '-'}</td>
-                    <td class="p-2.5 text-center font-bold text-amber-700">${r.qty}</td>
+                    <td class="p-2.5 text-center">
+                        <input type="number" min="0" step="1" value="${r.qty}" data-id="${r.id}"
+                            onchange="updateQty(this)"
+                            class="w-16 text-center font-bold text-amber-700 border border-amber-300 rounded px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-amber-50">
+                    </td>
                     <td class="p-2.5 text-right text-emerald-700">${r.tonSv.toLocaleString()}</td>
                     <td class="p-2.5 text-right font-bold text-indigo-700">${r.total.toLocaleString()}</td>
                     <td class="p-2.5 text-right text-blue-700">${r.tonMisa.toLocaleString()}</td>
