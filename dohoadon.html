@@ -916,7 +916,20 @@
     //    tùng (NCC Siêu Việt Mô Tô...) dùng dấu "+" để nối 2 đoạn số - nếu không cho phép, mã
     //    này sẽ trượt khỏi rule 1 (do "+" không khớp charset) rồi rơi xuống rule Honda ở dưới,
     //    bị cắt sai ngay tại dấu gạch nối ĐẦU TIÊN thay vì lấy trọn cả mã nhiều đoạn.
-    if (tokens.length > 1 && hyphenCountFirst >= 2 && /^[A-Za-z0-9+\-]{5,25}$/.test(first)) {
+    // [v35 - Bugfix "AH-378-T CÒI 65MM" (hóa đơn NCC Minh Vũ)] Rule 1 gốc chỉ đòi hỏi
+    // đoạn đầu có >=2 dấu gạch ngang + có ít nhất 1 chữ số ở bất kỳ đâu trong cleanCode,
+    // nên khớp NHẦM cả các tên hàng có model number kiểu "AH-378-T" (2 chữ + số + 1 chữ,
+    // đứng trước tên mô tả "CÒI 65MM") - vốn không phải mã hàng tách rời mà là 1 PHẦN của
+    // tên sản phẩm (NCC này không có cột "Mã hàng" riêng, chỉ có đúng 1 cột "Tên hàng hóa,
+    // dịch vụ"). Kết quả sai: invCode bị gán "AH-378-T", invName bị cắt cụt còn "CÒI 65MM"
+    // thay vì giữ nguyên đầy đủ "AH-378-T CÒI 65MM" - sai khi đối chiếu danh mục/hiển thị.
+    // Mã phụ tùng catalog THẬT của SYM/Siêu Việt Mô Tô (các ví dụ trong comment gốc bên
+    // dưới: "13102-VA2-305-L1", "24701-KYZ-9000+00"...) luôn có ĐOẠN ĐẦU TIÊN (trước dấu
+    // gạch ngang đầu) là CHUỖI SỐ THUẦN dài >=4 chữ số (số hiệu catalog gốc của hãng) -
+    // KHÔNG BAO GIỜ bắt đầu bằng chữ cái như "AH". Bổ sung điều kiện này để phân biệt mã
+    // catalog thật với model number lẫn trong tên hàng, tránh tách nhầm.
+    let firstSegBeforeHyphen = first.split('-')[0];
+    if (tokens.length > 1 && hyphenCountFirst >= 2 && /^[A-Za-z0-9+\-]{5,25}$/.test(first) && /^\d{4,}$/.test(firstSegBeforeHyphen)) {
       let firstClean = cleanCode(first);
       if (firstClean.length >= 5 && /\d/.test(firstClean) && !first.endsWith('-')) {
         return { code: first, name: tokens.slice(1).join(' ').trim() };
@@ -1004,7 +1017,15 @@
       // khoảng trắng này, các cụm mô tả trên bị hiểu nhầm thành "Mã hàng" (do vẫn thỏa các điều
       // kiện độ dài/có số/có chữ/không có "/."), bị cắt rời khỏi Tên hàng, làm sai lệch cả tên
       // lẫn mã khi đối chiếu với danh mục MISA.
-      let codeCand = parens.map(p => p.slice(1, -1).trim()).filter(p => cleanCode(p).length >= 6 && /\d/.test(p) && /[A-Za-z]/.test(p) && !/[\/.]/.test(p) && !/\s/.test(p) && !PACKAGING_NOTE_RE.test(p) && !PACKAGING_QTY_RE.test(p));
+      // [v42 - Bugfix thông số điện áp/công suất ghi trong ngoặc bị hiểu nhầm là mã hàng, VD
+      // "(12V,24W)", "(12V,25W)" (hóa đơn NCC Hải Hà - linh kiện điện: bóng đèn, còi, IC nạp).
+      // Các cụm này vẫn thỏa mọi điều kiện lọc hiện có (đủ dài, có số, có chữ, không chứa "/."
+      // hay khoảng trắng) nên bị nhận nhầm thành mã phụ tùng thật kiểu Suzuki, khiến toàn bộ
+      // thông số kỹ thuật ("12V,24W") bị CẮT MẤT khỏi tên hàng khi đối chiếu MISA. Mã phụ tùng
+      // thật (Honda/Suzuki/SYM...) luôn là 1 chuỗi chữ-số-gạch nối liền mạch, KHÔNG BAO GIỜ
+      // chứa dấu PHẨY bên trong (dấu phẩy chỉ dùng để liệt kê nhiều giá trị thông số như điện
+      // áp/công suất) - bổ sung loại trừ dấu hiệu này để phân biệt.
+      let codeCand = parens.map(p => p.slice(1, -1).trim()).filter(p => cleanCode(p).length >= 6 && /\d/.test(p) && /[A-Za-z]/.test(p) && !/[\/.,]/.test(p) && !/\s/.test(p) && !PACKAGING_NOTE_RE.test(p) && !PACKAGING_QTY_RE.test(p));
       if (codeCand.length > 0) {
         let code = codeCand[codeCand.length - 1]; // Mã phụ tùng là ngoặc cuối cùng
         // Cho phép khoảng trắng đệm ngay trong ngoặc quanh mã, ví dụ "( 92101-06022-0009)"
@@ -1015,9 +1036,18 @@
     }
 
     // 4. Dự phòng: từ đầu tiên là mã đơn giản, có khoảng trắng tách khỏi tên
+    // [v35] Áp dụng cùng điều kiện chặn "model number lẫn trong tên" như Rule 1 ở trên
+    // (VD "AH-378-T CÒI 65MM") cho trường hợp từ đầu CÓ gạch nối - nếu không, các chuỗi
+    // này trượt khỏi Rule 1 (do thiếu điều kiện đoạn đầu là số) rồi vẫn bị Rule 4 (không
+    // có điều kiện đó) bắt nhầm y hệt. Chỉ bỏ qua kiểm tra "đoạn đầu là số" khi từ đầu
+    // KHÔNG chứa gạch nối (mã đơn giản 1 đoạn thuần chữ-số, ví dụ "05T123" - không có
+    // định dạng "chữ-số-chữ" nhiều đoạn dễ nhầm với model number).
     if (tokens.length > 1 && /^[A-Za-z0-9+\-]{5,25}$/.test(first)) {
+      let firstSegBeforeHyphen4 = first.split('-')[0];
+      let hasHyphen4 = first.includes('-');
+      let passesModelNumberGuard = !hasHyphen4 || /^\d{4,}$/.test(firstSegBeforeHyphen4);
       let firstClean = cleanCode(first);
-      if (firstClean.length >= 5 && /\d/.test(firstClean) && !first.endsWith('-')) {
+      if (passesModelNumberGuard && firstClean.length >= 5 && /\d/.test(firstClean) && !first.endsWith('-')) {
         return { code: first, name: tokens.slice(1).join(' ').trim() };
       }
     }
@@ -1337,7 +1367,16 @@
         }
 
         // Kiểm tra chiều tọa độ Y (chuẩn giảm dần hay ngược tăng dần)
-        let headerYs = linesData.filter(l => /HÓA ĐƠN|STT|TÊN HÀNG|VAT INVOICE/i.test(l[1])).map(l => l[0]);
+        // [Bugfix] Regex cũ chỉ dò "HÓA ĐƠN" (không kèm "GIÁ TRỊ GIA TĂNG") nên bị khớp NHẦM
+        // với dòng disclaimer cuối trang luôn có ở hóa đơn MISA meInvoice, VD "(Cần kiểm tra,
+        // đối chiếu khi lập, giao, nhận hóa đơn)" - dòng này nằm Ở CUỐI trang (Y rất thấp), nên
+        // khi lẫn vào headerYs sẽ kéo tụt avgH xuống thấp hơn cả avgF, khiến yDescending bị
+        // suy luận SAI thành false (ngược chiều), làm ĐẢO NGƯỢC thứ tự toàn bộ dòng trong
+        // trang đó - hậu quả là các dòng hàng bị xáo trộn thứ tự và có thể bị RỚT MẤT hoàn
+        // toàn (khi bộ dò khối STT tuần tự gặp thứ tự dòng không còn tăng dần hợp lý). Dùng
+        // cụm đầy đủ "HÓA ĐƠN GIÁ TRỊ GIA TĂNG" (tiêu đề thật của hóa đơn) thay vì chỉ "HÓA
+        // ĐƠN" để không còn khớp nhầm các câu văn thông thường khác có chứa từ "hóa đơn".
+        let headerYs = linesData.filter(l => /HÓA ĐƠN GIÁ TRỊ GIA TĂNG|STT|TÊN HÀNG|VAT INVOICE/i.test(l[1])).map(l => l[0]);
         let footerYs = linesData.filter(l => /TỔNG CỘNG|NGƯỜI BÁN|KÝ BỞI|BẰNG CHỮ|CỘNG TIỀN/i.test(l[1])).map(l => l[0]);
         let yDescending = true;
         if (headerYs.length > 0 && footerYs.length > 0) {
@@ -1408,6 +1447,25 @@
         }
       }
 
+      // [v37] Một số ít dòng Đơn giá không phải số nguyên mà là số THẬP PHÂN kiểu Việt Nam
+      // (dấu phẩy "," ngăn phần thập phân), ví dụ "149.760,333333" hay "141.439,666667" - xuất
+      // hiện khi Thành tiền chia đúng cho Số lượng ra số dư lẻ (149.760,333333 x 3 = 449.281).
+      // Khi PDF tràn dòng, phần "nguyên + dấu phẩy" và phần "thập phân" bị TÁCH thành 2 dòng
+      // vật lý riêng biệt - ví dụ dòng "149.760," rồi dòng "333333" đứng kế tiếp - khác với
+      // trường hợp v34 ở trên (số nguyên thuần, cắt ngay giữa 1 nhóm nghìn). Nếu không ghép
+      // lại, dòng "149.760," (kết thúc bằng dấu phẩy, không phải số hợp lệ) và "333333" (dãy số
+      // đứng riêng) bị hiểu nhầm thành 2 token ĐỘC LẬP khi bóc tách theo cột, làm sai lệch hoàn
+      // toàn Đơn giá/Thành tiền của dòng hàng đó. Nhận diện: dòng đứng trước kết thúc đúng bằng
+      // 1 dấu phẩy (sau 1 số có thể có nhóm nghìn dấu chấm), dòng ngay sau chỉ gồm thuần chữ số
+      // (phần thập phân bị cắt rời) - ghép trực tiếp không thêm khoảng trắng để khi parseNum()
+      // xử lý (đổi "," thành ".") ra đúng số thập phân gốc.
+      for (let li = 0; li < rawLines.length - 1; li++) {
+        if (/^\d{1,3}(?:\.\d{3})*,$/.test(rawLines[li]) && /^\d{1,8}$/.test(rawLines[li + 1])) {
+          rawLines[li] = rawLines[li] + rawLines[li + 1];
+          rawLines.splice(li + 1, 1);
+        }
+      }
+
       fullDocText += ' ' + rawLines.join(' ');
 
       // --- BÓC TÁCH DÒNG HÀNG HÓA (hỗ trợ tên hàng bị ngắt thành NHIỀU dòng bất kỳ, với
@@ -1435,7 +1493,40 @@
       // SU QUAI DÈ" bán theo "Vĩ"), KHÁC với "Vỉ" (dấu HỎI, đã có sẵn - dùng cho vỉ thuốc/vỉ
       // linh kiện). 2 từ này khác nghĩa nhưng dễ nhầm lẫn khi gõ dấu; nếu thiếu "vĩ", token
       // ĐVT này bị nuốt nhầm vào cuối TÊN HÀNG, còn ĐVT trả về mặc định sai thành "Chiếc".
-      const UNIT_TOKEN_RE_PDF = /^(chiếc|cái|con|bộ|bình|lít|hộp|kg|mét|lô|cuộn|tấm|lon|chai|can|xô|phuy|cụm|thùng|gói|bao|kiện|đôi|túi|bó|vỉ|vĩ|ống|tá|cây|sợi|cặp|tuýp|tuyp|hũ|hủ|thanh|viên|chùm|ly|xấp|bánh)$/i;
+      // [Bugfix] Bổ sung "cục" (ĐVT phổ biến của NCC Nam Trang NTP cho mobin, cục tiết chế...)
+      // vào danh sách ĐVT hợp lệ - trước đây thiếu "cục" khiến extractDataTail không nhận ra
+      // đây là cột Đơn vị tính, làm ĐVT bị mặc định sai thành "Chiếc" và chữ "Cục" bị dính
+      // nhầm vào cuối Tên hàng (VD "Mobin lửa 6 tép Dr AVP Cục" thay vì tên đúng "Mobin lửa 6
+      // tép Dr AVP" với ĐVT "Cục").
+      const UNIT_TOKEN_RE_PDF = /^(chiếc|cái|cai|con|bộ|bình|lít|hộp|kg|mét|lô|cuộn|tấm|tám|lon|chai|can|xô|phuy|cụm|cục|thùng|gói|bao|kiện|đôi|túi|bó|vỉ|vĩ|ống|tá|cây|sợi|cặp|tuýp|tuyp|hũ|hủ|thanh|viên|chùm|ly|xấp|bánh)$/i;
+      // [v36] "tám" (dấu sắc, không mũ - nghĩa gốc là số "8") được chấp nhận ở VỊ TRÍ ĐVT vì
+      // trên thực tế NCC hay gõ NHẦM dấu "Tấm" (ấ) thành "Tám" (á) khi lập hóa đơn (ví dụ dòng
+      // "...CAO SU TÁM 20,00..." thay vì "...CAO SU TẤM 20,00..."). Nhầm lẫn CHỈ xảy ra ở đúng
+      // vị trí token liền trước Số lượng nên an toàn để nhận diện; sau khi khớp, luôn CHUẨN HÓA
+      // lại thành "Tấm" (xem fixTamTypoPDF) để ĐVT không bị sai khi so sánh/đối chiếu về sau.
+      // [v44] "Cai" (thiếu hẳn dấu mũ + dấu sắc, gõ nhầm hoàn toàn thành chữ thường "cai") cũng
+      // gặp thực tế ở 1 số hóa đơn MISA (VD dòng "Bộ bi bát phuốc trên Cai 14 122.720 1.718.080"
+      // - NCC gõ ĐVT "Cai" thay vì "Cái"). Nếu không nhận diện, "Cai" bị nuốt nhầm vào cuối TÊN
+      // HÀNG ("...trên Cai") và ĐVT bị mặc định sai thành "Chiếc". Do vị trí token này LUÔN đứng
+      // ngay trước cột Số lượng (áp dụng chung quy tắc như "tám"), an toàn để nhận diện là biến
+      // thể lỗi chính tả của "Cái" rồi CHUẨN HÓA lại đúng thành "Cái" (xem fixTamTypoPDF).
+      function fixTamTypoPDF(tok) {
+        if (/^tám$/i.test(tok || '')) {
+          return applyCasePattern(tok, 'tấm');
+        }
+        if (/^cai$/i.test(tok || '')) {
+          return applyCasePattern(tok, 'cái');
+        }
+        return tok;
+      }
+      function applyCasePattern(tok, target) {
+        let result = '';
+        for (let i = 0; i < tok.length; i++) {
+          const c = tok[i];
+          result += (c === c.toUpperCase() && c !== c.toLowerCase()) ? target[i].toUpperCase() : target[i];
+        }
+        return result;
+      }
       const STOP_RE_PDF = /^(STT|CỘNG(\s|:|$)|CỘNG TIỀN|Thuế$|THUẾ SUẤT|TỔNG TIỀN|TỔNG SỐ LƯỢNG|SỐ TIỀN|NGƯỜI MUA|NGƯỜI BÁN|KÝ BỞI|TRA CỨU|PHÁT HÀNH|TRANG|CÔNG TY|MÃ SỐ THUẾ|ĐỊA CHỈ|ĐIỆN THOẠI|HÓA ĐƠN|VAT INVOICE|TIỀN TRƯỚC THUẾ|TỔNG CỘNG|TỔNG HỢP|TỔNG TIỀN KHÔNG KÊ KHAI|TIỀN KHÔNG CHỊU THUẾ|TIỀN CHỊU THUẾ SUẤT|Số tiền viết|Mã CQT|Mẫu số|Ký hiệu|Số:|Cộng tiền hàng|Tra cứu tại|Phát hành bởi|Signature|Ký ngày|Ký bởi)/i;
 
       // [v19 - Mẫu MISA meInvoice "Mai Thảo" và tương tự] Tiêu đề bảng bị chia thành NHIỀU
@@ -1466,15 +1557,31 @@
       // nằm trong danh sách từ vựng tiêu đề cột đã biết (không có tên hàng/mã hàng/số liệu
       // thật đi kèm) thì chắc chắn là rác tiêu đề, có thể loại bỏ an toàn mà không ảnh hưởng
       // tên hàng thật (tên hàng luôn chứa ít nhất 1 từ ngoài danh sách này: tên riêng, mã, số).
+      // [v43 - Mẫu hóa đơn có thêm cột "Mã hàng"/"ID" (VD NCC Phú Quang), tên hàng dài bị
+      // ngắt NHIỀU dòng] Tiêu đề bảng của mẫu này chia thành nhiều tầng phức tạp hơn (do có
+      // thêm 2 cột "Mã hàng"/"ID" chen giữa STT và Đơn vị tính), sinh ra các dòng rác tiêu đề
+      // kiểu "(No) (Item code) (Quantity) (Unit price) (Amount)" (thiếu từ "item"/"code"
+      // trong từ điển cũ) và mảnh tiêu đề CHỈ CÒN ĐÚNG 1 TỪ như "services)" (bị chặn bởi
+      // ngưỡng "words.length < 2" cũ, vốn chỉ nhằm tránh khớp nhầm số trang lẻ loi). Nếu
+      // KHÔNG lọc được các dòng rác này, chúng bị hiểu nhầm thành "tên hàng mồ côi" mở ra 1
+      // khối chờ giả ngay TRƯỚC mặt hàng STT=1 thật, làm cộng dồn sai "fragCount" của khối -
+      // kéo theo "expectedSuffixCount" (số dòng đuôi cần chờ) của MỌI mặt hàng sau đó trên
+      // cùng trang bị lệch, khiến tên hàng bị ghép lẫn giữa các mặt hàng liền kề và/hoặc dữ
+      // liệu Số lượng/Đơn giá bị gán nhầm STT.
       const HEADER_VOCAB_PDF = new Set([
         'no', 'unit', 'quantity', 'discount', 'vat', 'total', 'amount', 'rate', 'services', 'with',
-        'name', 'of', 'goods', 'and', 'price', 'before', 'after',
+        'name', 'of', 'goods', 'and', 'price', 'before', 'after', 'item', 'code', 'id',
         'stt', 'dvt', 'so', 'luong', 'don', 'gia', 'truoc', 'chiet', 'khau', 'tien', 'thanh', 'sau',
-        'thue', 'suat', 'gtgt', 'hang', 'hoa', 'dich', 'vu', 'ten'
+        'thue', 'suat', 'gtgt', 'hang', 'hoa', 'dich', 'vu', 'ten', 'ma'
       ]);
       function isHeaderVocabOnlyLine(line) {
         let words = String(line || '').replace(/[(),.:]/g, ' ').split(/\s+/).filter(Boolean);
-        if (words.length < 2) return false; // dòng quá ngắn (VD 1 số trang) không xét ở đây
+        if (words.length < 1) return false;
+        // Dòng chỉ vỏn vẹn 1 từ: CHỈ coi là rác tiêu đề khi dòng gốc có kèm dấu ngoặc "(" hoặc
+        // ")" (dấu hiệu đây là MẢNH vỡ của 1 cụm chú thích tiếng Anh dạng "(Name of...)" bị
+        // tách dòng, không phải tên hàng thật) - tên hàng hóa thật (dù ngắn) không bao giờ tự
+        // nó là 1 từ tiếng Anh đơn lẻ kèm dấu ngoặc như vậy.
+        if (words.length === 1 && !/[()]/.test(line)) return false;
         for (let w of words) {
           if (!HEADER_VOCAB_PDF.has(removeVietnameseTones(w).toLowerCase())) return false;
         }
@@ -1549,7 +1656,7 @@
             let nameEndIdx = hasUnit ? idxX - 2 : idxX - 1;
             let namePart = tokens.slice(0, nameEndIdx + 1).join(' ').trim();
             if (namePart || allowEmptyName) {
-              return { namePart, unit: hasUnit ? unitCand : 'Chiếc', qty: qtyParsed, unitPrice: 0, amt: 0, vatRate: '' };
+              return { namePart, unit: hasUnit ? fixTamTypoPDF(unitCand) : 'Chiếc', qty: qtyParsed, unitPrice: 0, amt: 0, vatRate: '' };
             }
           }
         }
@@ -1586,7 +1693,7 @@
           // ĐVT - nếu không xử lý riêng, cả dòng hàng này sẽ bị RỚT MẤT hoàn toàn.
           if (UNIT_TOKEN_RE_PDF.test(tokens[idx])) {
             let qtyOnly = amt;
-            let unitOnly = tokens[idx];
+            let unitOnly = fixTamTypoPDF(tokens[idx]);
             let namePartOnly = tokens.slice(0, idx).join(' ').trim();
             if (!namePartOnly && !allowEmptyName) return null;
             return { namePart: namePartOnly, unit: unitOnly, qty: qtyOnly, unitPrice: 0, amt: 0, vatRate };
@@ -1607,17 +1714,17 @@
           // định unit='Chiếc' RỒI trừ thêm idx một lần nữa như thể vừa tiêu thụ token thật,
           // khiến idx bị âm sâu hơn mức cần thiết và làm namePart (tokens.slice(0, idx+1))
           // cắt nhầm mất token cuối cùng của phần số liệu, biến nó thành rác dính vào tên.
-          if (idx >= 0 && UNIT_TOKEN_RE_PDF.test(tokens[idx])) { unit = tokens[idx]; idx--; }
+          if (idx >= 0 && UNIT_TOKEN_RE_PDF.test(tokens[idx])) { unit = fixTamTypoPDF(tokens[idx]); idx--; }
           else { unit = 'Chiếc'; }
         } else if (UNIT_TOKEN_RE_PDF.test(qtyToken)) {
           // Hàng khuyến mãi/tặng kèm 0đ: cột "Đơn giá" bị in TRỐNG, dòng chỉ còn 2 số.
           qty = unitPrice;
           unitPrice = 0;
-          unit = qtyToken;
+          unit = fixTamTypoPDF(qtyToken);
           idx--;
         } else {
           qty = 1;
-          if (idx >= 0 && UNIT_TOKEN_RE_PDF.test(tokens[idx])) { unit = tokens[idx]; idx--; }
+          if (idx >= 0 && UNIT_TOKEN_RE_PDF.test(tokens[idx])) { unit = fixTamTypoPDF(tokens[idx]); idx--; }
           else { unit = 'Chiếc'; }
         }
 
@@ -1642,15 +1749,40 @@
       // Bộ máy bóc tách tổng quát bên dưới (thiết kế cho mẫu 1-dòng-1-cột-liền-mạch) không xử lý
       // được kiểu chẻ cột xen kẽ này nên phải tách riêng thành 1 hàm chuyên biệt, CHỈ kích hoạt
       // khi phát hiện đúng dấu hiệu của mẫu này (không ảnh hưởng các mẫu hóa đơn khác).
-      function parseTinhChatTemplateBlocks(lines) {
+      function parseTinhChatTemplateBlocks(lines, isContinuationPage) {
         let hoaLineCount = 0, hangMarkerCount = 0, dichVuMarkerCount = 0;
         for (let l of lines) {
           let t = l.trim();
           if (/^\d{1,4}\s+hóa,\s*\S/i.test(t)) hoaLineCount++;
-          if (/^hàng$/i.test(t)) hangMarkerCount++;
-          if (/^dịch\s*vụ$/i.test(t)) dichVuMarkerCount++;
+          // [v42 - Bugfix trang cuối/ranh giới trang chỉ có 1 mặt hàng, mốc "Hàng"/"dịch vụ"
+          // BỊ DÍNH LIỀN với mảnh tên hàng ngay trên CÙNG 1 dòng vật lý (VD "Hàng Bóng đèn
+          // Led, mã Z3 H4, loại đui" hay "dịch vụ cho xe máy") thay vì đứng riêng 1 dòng như
+          // thường lệ - xảy ra khi trang chỉ in đúng 1 dòng hàng nên PDF canh dòng khít hơn.
+          // Guard cũ chỉ đếm khi "Hàng"/"dịch vụ" đứng ĐÚNG 1 mình trên dòng (dùng $ ở cuối
+          // regex), nên KHÔNG đếm được các dòng dính chữ này, khiến cả hàm bị coi là "không
+          // khớp mẫu" (return null) dù vòng lặp bóc tách bên dưới (dùng openMatch/closeRe với
+          // leadingFrag/trailingFrag) đã xử lý đúng các dòng dính chữ này. Kết quả: hàm bị
+          // bỏ qua oan, dữ liệu rơi xuống bộ dò dự phòng không hợp mẫu 3 cột "Tính chất",
+          // làm tên hàng bị cắt cụt/lẫn rác (VD mất hẳn phần đầu "Bóng đèn Led, mã Z3 H4,
+          // loại đui", còn sót "hóa," lẫn trong tên). Nới lỏng thành khớp tiền tố + ranh giới
+          // từ (word boundary) thay vì khớp chính xác trọn dòng - an toàn vì vòng lặp bóc
+          // tách bên dưới vốn đã được thiết kế để xử lý đúng cả 2 trường hợp (đứng riêng dòng
+          // HOẶC dính liền chữ) thông qua openMatch/closeRe.
+          if (/^hàng(\s|$)/i.test(t)) hangMarkerCount++;
+          if (/^dịch\s*vụ(\s|$)/i.test(t)) dichVuMarkerCount++;
         }
         if (hoaLineCount < 1 || hangMarkerCount < 1 || dichVuMarkerCount < 1) return null;
+
+        // [v40] Một số hóa đơn (VD hóa đơn 227 NCC Minh Gia Vinh) có thêm cột "Số lô" chèn
+        // giữa cột "Tên hàng hóa, dịch vụ" và "Đơn vị tính" (giá trị luôn là "0" ở mọi dòng đã
+        // gặp). Cột này dính liền ngay sau mảnh giữa "hóa,"/"chú/diễn" trên dòng STT+số liệu
+        // (VD "1 hóa, 0 cái 5 111.111 555.555 8%"), khiến "0" bị hiểu nhầm thành 1 phần TÊN
+        // HÀNG khi bóc tách từ phải sang trái (không có cột nào khác để gán riêng cho nó).
+        // Phát hiện qua tiêu đề cột "Số lô" xuất hiện trong nội dung TOÀN BỘ hóa đơn (dùng
+        // fullDocText đã gộp từ các trang trước đó, không chỉ trang hiện tại) - vì tiêu đề
+        // bảng thường CHỈ in ở trang đầu tiên, không lặp lại ở các trang sau, nên nếu chỉ dò
+        // trong nội dung trang hiện tại thì các trang từ trang 2 trở đi sẽ luôn bị bỏ sót.
+        let hasSoLoCol = /số\s*lô/i.test(fullDocText) || lines.some(l => /số\s*lô/i.test(l));
 
         // [v25] Mốc mở/đóng khối "Hàng" / "dịch vụ" đôi khi bị DÍNH LIỀN với mảnh tên hàng
         // lân cận trên CÙNG 1 dòng vật lý (thường xảy ra ở hàng cuối trang, do PDF nén sát
@@ -1664,12 +1796,161 @@
         // vụ"), cũng cần nhận diện riêng để không bỏ sót các dòng khuyến mại kiểu này.
         let blocks = [];
         let i = 0;
+        // [v38] Khi TÊN HÀNG dài hơn số dòng "tự nhiên" của cột Tính chất (3 dòng cho "Hàng/
+        // hóa,/dịch vụ", tương tự cho "Ghi/chú-diễn/giải"), MISA canh GIỮA cột Tính chất theo
+        // chiều dọc so với ô Tên hàng, khiến phần DƯ RA của tên hàng nằm rải cả dòng mồ côi
+        // NGAY TRƯỚC mốc mở ("Hàng"/"Ghi"...) của khối NÀY lẫn dòng mồ côi NGAY SAU mốc đóng
+        // ("dịch vụ"/"giải"...) của khối TRƯỚC - ví dụ tên "Lốp 2.50-17 6PR CA136A TT Cam HM
+        // (N) - 01031451 (CAOSUMINA)" (4 dòng) bị chẻ thành "Lốp 2.50-17 6PR" (mồ côi, đứng
+        // TRƯỚC "Hàng" của chính khối này) + "CA136A..." + "(N)..." (nằm trong khối) +
+        // "(CAOSUMINA)" (mồ côi, đứng SAU "dịch vụ" của chính khối này, tức TRƯỚC "Hàng" của
+        // khối kế tiếp). Nếu không xử lý, "Lốp 2.50-17 6PR" bị nuốt mất hoàn toàn (đứng ngoài
+        // mọi cặp mốc mở/đóng đã biết) và "(CAOSUMINA)" bị gán NHẦM làm phần đầu tên hàng của
+        // khối KẾ TIẾP (đứng ngay trước mốc "Hàng" tiếp theo).
+        //
+        // Tích lũy các dòng "mồ côi" (không khớp mốc mở) vào orphanBuffer; khi gặp mốc mở kế
+        // tiếp, chỉ xử lý carry-over nếu buffer đủ NGẮN (<=4 dòng) VÀ đã có ít nhất 1 khối
+        // [v41] Hàm tách "buffer" các dòng mồ côi thành (a) phần thuộc ĐUÔI tên hàng của khối
+        // VỪA ĐÓNG và (b) phần còn lại thuộc ĐẦU tên hàng của khối SẮP MỞ. Một dòng được coi
+        // là "tiếp nối" (thuộc về khối vừa đóng) nếu: bắt đầu bằng "(", ")", "-", chữ cái
+        // THƯỜNG (kiểu "(CAOSUMINA)"), HOẶC tên hàng của khối vừa đóng đang có dấu "(" chưa
+        // đóng (số dấu "(" nhiều hơn ")") - trường hợp này dòng kế tiếp CHẮC CHẮN là phần đóng
+        // ngoặc dở dang dù bắt đầu bằng chữ HOA (VD "Euromina)" đóng nốt "...- 0103728 ("),
+        // không phải tên hàng mới. Dừng lại ngay khi gặp dòng KHÔNG thỏa cả 2 điều kiện trên
+        // (trông như mở đầu 1 tên hàng thật sự mới, VD "Lốp 100/90-14 6PR").
+        function splitOrphanBuffer(buffer, currentName) {
+          let acc = currentName || '';
+          let idx = 0;
+          while (idx < buffer.length) {
+            let opens = (acc.match(/\(/g) || []).length;
+            let closes = (acc.match(/\)/g) || []).length;
+            // Cần tiếp tục coi dòng kế tiếp là "đuôi" dở dang nếu: còn dấu "(" chưa đóng, HOẶC
+            // tên hàng hiện đang kết thúc bằng dấu "-" (mã hàng/số hiệu bị ngắt dòng giữa
+            // chừng, ví dụ "...HM -" rồi "0103194 ( Euromina)"), HOẶC kết thúc bằng chính dấu
+            // "(" (mở ngoặc chờ đóng).
+            let needsClose = opens > closes || /[-(]$/.test(acc.trim());
+            let cand = buffer[idx];
+            // [v42 - Bugfix đuôi câu mô tả bị ngắt dòng thành 1 mảnh SỐ/PHẦN TRĂM đứng riêng
+            // (VD "...điện áp 12V, công suất: 35w.Mới" rồi "100%" đứng 1 mình 1 dòng, hóa đơn
+            // NCC Hải Hà) - mảnh này KHÔNG bắt đầu bằng "()-" hay chữ thường/có dấu như các
+            // dấu hiệu "tiếp nối" đã biết ở trên, nên bị coi nhầm là ĐÃ hết phần đuôi, dừng
+            // ngay tại idx=0. Hậu quả: "100%" bị bỏ lại trong orphanBuffer và gán NHẦM thành
+            // carriedPrefix cho ĐẦU tên hàng của mặt hàng kế tiếp (VD "100% Bóng đèn Led,mã
+            // R03..." thay vì mặt hàng trước phải kết thúc bằng "...35w.Mới 100%"). Bổ sung
+            // nhận diện: 1 mảnh CHỈ gồm số (có thể có dấu . hoặc ,) rồi kết thúc bằng "%" vẫn
+            // luôn là phần ĐUÔI của 1 câu mô tả (không có sản phẩm nào bắt đầu tên bằng đúng
+            // 1 con số phần trăm đứng riêng), nên coi là "tiếp nối" giống các dấu hiệu khác.
+            // [v43 - Mở rộng v42] Không chỉ 1 mảnh percent TRẦN TRỤI ("100%" đứng 1 mình), mà cả
+            // 1 đoạn MÔ TẢ THÔNG SỐ KỸ THUẬT NGẮN đi kèm rồi kết thúc bằng "%" (VD "12V - 24W.
+            // Mới 100%", hóa đơn NCC Hải Hà) cũng LUÔN là phần ĐUÔI dở dang của mô tả đứng ngay
+            // trước đó (bị PDF ngắt dòng ngay giữa câu, kiểu "...dùng điện" + "12V - 24W. Mới
+            // 100%") - không có tên phụ tùng thật nào bắt đầu bằng 1 thông số kỹ thuật (số +
+            // đơn vị điện áp/công suất kiểu "V"/"W") RỒI kết thúc ngay bằng dấu "%" ở cuối chính
+            // dòng đó, nên nhận diện bằng 2 điều kiện: dòng BẮT ĐẦU bằng chữ số VÀ KẾT THÚC bằng
+            // "%". Quy tắc cũ (chỉ khớp "100%" thuần túy) là 1 trường hợp riêng của quy tắc mới
+            // này nên được thay thế hẳn, không cần giữ song song.
+            let looksLikeTrailingPercent = /^\d/.test(cand) && /%\s*$/.test(cand);
+            if (!needsClose && !looksLikeTrailingPercent && !/^[()\-]|^[a-zà-ỹđ]/.test(cand)) break;
+            acc = joinFrag(acc, cand);
+            idx++;
+          }
+          return { idx, name: acc };
+        }
+
+        let orphanBuffer = [];
+        // [v42] Đánh dấu đã đi qua dòng tiêu đề bảng ("STT Tên hàng hóa, dịch vụ ...") hay
+        // chưa - dùng để LOẠI TRỪ toàn bộ rác tiêu đề công ty/người mua/tiêu đề cột (đứng
+        // TRƯỚC dòng "STT") ra khỏi orphanBuffer, tránh làm orphanBuffer bị "phình" quá dài
+        // (vượt ngưỡng <=4 dòng ở carry-over bên dưới) chỉ vì lẫn rác không liên quan, khiến
+        // dòng ĐẦU TIÊN thật sự của tên hàng mặt hàng số 1 (đứng ngay sau rác tiêu đề, ngay
+        // trước mốc mở "Hàng" của chính nó) bị bỏ qua oan cùng với rác.
+        let headerPassed = false;
+        // Các mảnh tiêu đề cột bị ngắt dòng, có thể còn sót lại 1-2 dòng NGAY SAU dòng "STT"
+        // (do tiêu đề 1 số cột dài phải in thành 2 tầng, tầng dưới lại canh xuống dưới dòng
+        // "STT..."), ví dụ "chất tính lượng khấu suất" hay "chiết khấu" - vẫn cần loại bỏ dù
+        // đã qua dòng "STT" để không lẫn vào tên hàng mặt hàng đầu tiên.
+        const HEADER_TAIL_LINE_RE = /^(STT|Tính|chất|Tên hàng hóa,?\s*dịch\s*vụ|Đơn vị|tính|Số|lượng|Đơn giá|Thành tiền|chưa trừ|chiết khấu|Chiết|khấu|Thuế|suất|GTGT|\s)+$/i;
         while (i < lines.length) {
-          let openMatch = lines[i].trim().match(/^(hàng|khuyến)\s*(.*)$/i);
-          if (!openMatch) { i++; continue; }
+          // [v37] Ngoài "Hàng hóa, dịch vụ" và "Khuyến mại", một số hóa đơn (VD NCC Minh Gia
+          // Vinh) còn dùng tính chất "Ghi chú/diễn giải" cho các dòng hàng khuyến mại/tặng kèm
+          // 0đ (ví dụ "Ruột 2.50-17 TR4 hàng KM không thu tiền"), bị PDF chẻ thành 3 mảnh y hệt
+          // cơ chế "Hàng"/"hóa,"/"dịch vụ": "Ghi" (mốc mở) / "chú/diễn" (dính vào dòng STT+số
+          // liệu) / "giải" (mốc đóng). Nếu không nhận diện riêng, toàn bộ dòng hàng này (STT +
+          // tên + số liệu) bị lọt qua NGOÀI mọi cặp mốc mở/đóng đã biết, nên KHÔNG bị gộp vào
+          // khối "Hàng...dịch vụ" liền trước/sau mà bị loại bỏ hoàn toàn khỏi kết quả.
+          let openMatch = lines[i].trim().match(/^(hàng|khuyến|ghi)\s*(.*)$/i);
+          if (!openMatch) {
+            let lineTrim = lines[i].trim();
+            if (!headerPassed) {
+              if (/^STT\b/i.test(lineTrim)) { headerPassed = true; orphanBuffer = []; i++; continue; }
+              // Trước khi thấy dòng "STT", mọi thứ chắc chắn là rác tiêu đề công ty/người mua -
+              // không đưa vào orphanBuffer để tránh làm sai lệch carry-over cho mặt hàng đầu.
+              i++; continue;
+            }
+            // [v42 - Bugfix mặt hàng CUỐI CÙNG của cả hóa đơn (không có mặt hàng nào theo sau
+            // để kích hoạt carry-over) có phần ĐUÔI tên hàng đứng mồ côi RIÊNG 1 dòng NGAY SAU
+            // mốc đóng "dịch vụ" (VD "cho xe máy" đứng 1 mình, hóa đơn NCC Hải Hà) - nếu không
+            // dừng LẬP TỨC khi gặp dòng rác bảng "Tổng hợp" ngay sau đó, orphanBuffer sẽ tiếp
+            // tục "nuốt" luôn toàn bộ các dòng rác bảng tổng kết thuế suất phía dưới (nhiều hơn
+            // hẳn 4 dòng), khiến điều kiện "orphanBuffer.length <= 4" ở đoạn xử lý đuôi cuối
+            // hàm KHÔNG còn thỏa mãn nữa - phần đuôi tên hàng thật sự ("cho xe máy") bị rớt mất
+            // vĩnh viễn dù đã đứng sẵn trong buffer. Dùng chung STOP_RE_PDF (đã dùng ở các hàm
+            // bóc tách khác) để nhận diện đúng thời điểm bảng dữ liệu đã kết thúc, xử lý luôn
+            // phần đuôi còn tồn đọng rồi dừng vòng lặp ngay, không đọc thêm rác phía sau nữa.
+            if (STOP_RE_PDF.test(lineTrim)) {
+              if (orphanBuffer.length && orphanBuffer.length <= 4 && blocks.length) {
+                let splitRes = splitOrphanBuffer(orphanBuffer, blocks[blocks.length - 1].rawName);
+                if (splitRes.idx > 0) { blocks[blocks.length - 1].rawName = splitRes.name; }
+              }
+              orphanBuffer = [];
+              break;
+            }
+            if (HEADER_TAIL_LINE_RE.test(lineTrim)) { i++; continue; }
+            orphanBuffer.push(lineTrim); i++; continue;
+          }
+
+          let carriedPrefix = '';
+          if (orphanBuffer.length) {
+            // [v39] Cho phép áp dụng carry-over ngay cả khi CHƯA có khối nào trong trang này
+            // (blocks.length === 0) nếu đây là TRANG TIẾP THEO (isContinuationPage) của 1 hóa
+            // đơn nhiều trang - vì MISA thường KHÔNG lặp lại phần tiêu đề bảng ở các trang sau,
+            // nên dòng mồ côi đứng ngay đầu trang gần như chắc chắn là phần đầu tên hàng của
+            // mặt hàng bị ngắt NGAY TẠI ranh giới trang (ví dụ "Lốp 70/100-17 4PR" đứng 1 mình
+            // ở đầu trang 2, là phần đầu của tên hàng "Lốp 70/100-17 4PR CA122G..."), KHÔNG
+            // phải rác tiêu đề như ở trang đầu tiên.
+            // [v42 - Bugfix mặt hàng ĐẦU TIÊN của trang 1 có dòng ĐẦU của tên hàng bị in CAO
+            // HƠN (Y lớn hơn) mốc mở "Hàng" của chính khối đó (VD "Bóng đèn halogen, hiệu:
+            // BMU," đứng 1 dòng riêng NGAY TRƯỚC "Hàng", hóa đơn NCC Hải Hà) - dòng này lọt
+            // vào orphanBuffer TRƯỚC KHI blocks có phần tử nào (blocks.length === 0) nên bị
+            // guard cũ chặn hoàn toàn (không phải trang tiếp theo, không có khối trước đó để
+            // gắn vào), khiến cả dòng bị RỚT MẤT vĩnh viễn thay vì trở thành phần ĐẦU của tên
+            // hàng mặt hàng thứ nhất. Nới lỏng để cho phép carry-over cả khi blocks.length===0
+            // trên trang 1, NHƯNG vẫn loại trừ trường hợp orphanBuffer thực sự là RÁC TIÊU ĐỀ
+            // BẢNG còn sót (mảnh tiêu đề cột như "Tính"/"chất"/"Đơn vị"/"tính"/"Số"/"lượng"/
+            // "Đơn giá"/"Thành tiền"/"chưa trừ"/"chiết khấu"/"Chiết"/"khấu"/"Thuế"/"suất") -
+            // chỉ áp dụng carry-over khi KHÔNG dòng nào trong buffer khớp các mảnh tiêu đề này.
+            const HEADER_FRAGMENT_RE = /^(STT|Tính|chất|Tên hàng hóa,?\s*dịch vụ|Đơn vị|tính|Số|lượng|Đơn giá|Thành tiền|chưa trừ|chiết khấu|Chiết|khấu|Thuế|suất|GTGT)$/i;
+            let looksLikeHeaderJunk = orphanBuffer.some(l => HEADER_FRAGMENT_RE.test(l.trim()));
+            if (orphanBuffer.length <= 4 && (blocks.length || isContinuationPage || !looksLikeHeaderJunk)) {
+              let splitRes = splitOrphanBuffer(orphanBuffer, blocks.length ? blocks[blocks.length - 1].rawName : '');
+              if (splitRes.idx > 0 && blocks.length) {
+                blocks[blocks.length - 1].rawName = splitRes.name;
+              }
+              carriedPrefix = orphanBuffer.slice(splitRes.idx).join(' ');
+            }
+            orphanBuffer = [];
+          }
+
           let openWord = openMatch[1].toLowerCase();
           let leadingFrag = openMatch[2].trim();
-          let closeRe = openWord === 'khuyến' ? /^mại\s*(.*)$/i : /^dịch\s*vụ\s*(.*)$/i;
+          if (carriedPrefix) leadingFrag = leadingFrag ? (carriedPrefix + ' ' + leadingFrag) : carriedPrefix;
+          let closeRe = openWord === 'khuyến' ? /^mại\s*(.*)$/i
+                      : openWord === 'ghi' ? /^giải\s*(.*)$/i
+                      : /^dịch\s*vụ\s*(.*)$/i;
+          // Mảnh giữa dính vào dòng STT+số liệu, tương ứng riêng theo từng loại tính chất
+          // ("hóa," cho "Hàng hóa, dịch vụ", "chú/diễn" cho "Ghi chú/diễn giải"; "Khuyến mại"
+          // không có mảnh giữa vì chỉ gồm đúng 2 từ).
+          let midFragRe = openWord === 'ghi' ? /^chú\s*\/?\s*diễn\s*/i : /^hóa,\s*/i;
 
           // [v33] Đôi khi PDF render LẶP ĐÔI y hệt chính mốc đóng khối ngay trên CÙNG 1 dòng vật
           // lý, ví dụ dòng "dịch vụ dịch vụ" thay vì "dịch vụ" (lỗi hiển thị của MISA khi 1 hàng
@@ -1679,7 +1960,7 @@
           // nhầm vào cuối Tên hàng của đúng dòng hàng hóa đó (VD "...Cụm Gương Phải dịch vụ").
           // Nhận diện: trailingFrag (sau khi chuẩn hóa) trùng khớp lại chính closeRe (tức bản
           // thân nó cũng là 1 mốc đóng/mở hợp lệ, không chứa nội dung nào khác) thì loại bỏ.
-          const DUP_MARKER_FRAG_RE = /^(hàng|khuyến|mại|hóa,?|dịch\s*vụ)$/i;
+          const DUP_MARKER_FRAG_RE = /^(hàng|khuyến|mại|hóa,?|dịch\s*vụ|ghi|giải|chú\s*\/?\s*diễn)$/i;
 
           let start = i + 1;
           let end = -1;
@@ -1707,7 +1988,21 @@
           for (let idx2 = 0; idx2 < bodyLines.length; idx2++) {
             let m = bodyLines[idx2].trim().match(/^(\d{1,4})\s+(.*)$/);
             if (!m) continue;
-            let rest = m[2].trim().replace(/^hóa,\s*/i, '');
+            let rest = m[2].trim().replace(midFragRe, '');
+            if (hasSoLoCol) {
+              // Token "0" (Số lô) có thể đứng NGAY ĐẦU rest (khi dòng STT+số liệu không còn
+              // mảnh tên hàng nào khác) hoặc NẰM GIỮA (khi vẫn còn 1 phần tên hàng ngay trên
+              // dòng này, VD "R300 6PR (Xanh 0 cái 50 ...") - tìm đúng vị trí "0" đứng NGAY
+              // TRƯỚC 1 token ĐVT hợp lệ (thay vì chỉ xét ở đầu chuỗi) rồi loại bỏ riêng nó.
+              let soLoToks = rest.split(/\s+/);
+              for (let ti = 0; ti < soLoToks.length - 1; ti++) {
+                if (soLoToks[ti] === '0' && UNIT_TOKEN_RE_PDF.test(soLoToks[ti + 1])) {
+                  soLoToks.splice(ti, 1);
+                  break;
+                }
+              }
+              rest = soLoToks.join(' ');
+            }
             if (extractDataTail(rest, true)) { sttLineIdx = idx2; sttNum = parseInt(m[1], 10); sttRestRaw = rest; break; }
           }
           if (sttLineIdx === -1) { i = end + 1; continue; } // khối không đúng dạng mong đợi, bỏ qua an toàn
@@ -1765,6 +2060,21 @@
 
           i = end + 1;
         }
+        // [v39] Xử lý phần "đuôi" tên hàng còn sót lại ở CUỐI TRANG (chưa kịp gặp mốc mở kế
+        // tiếp để kích hoạt xử lý carry-over ở trên, vì đây là mặt hàng CUỐI CÙNG được in trên
+        // trang này) - ví dụ dòng ngoặc đơn "(CAOSUMINA)" đứng lẻ loi ngay trước khi ngắt trang,
+        // là phần đuôi tên hàng của mặt hàng cuối trang, nếu không xử lý sẽ bị rớt mất.
+        if (orphanBuffer.length && orphanBuffer.length <= 4 && blocks.length) {
+          let splitRes = splitOrphanBuffer(orphanBuffer, blocks[blocks.length - 1].rawName);
+          if (splitRes.idx > 0) {
+            blocks[blocks.length - 1].rawName = splitRes.name;
+          }
+          // Phần còn lại (nếu có) trông như phần đầu của 1 mặt hàng MỚI bị cắt dở dang ngay
+          // tại ranh giới trang - hàm này không có đủ ngữ cảnh (STT/số liệu) để xử lý tiếp,
+          // đành bỏ qua; đây là giới hạn hiếm gặp còn lại (tên hàng tràn ĐÚNG ranh giới trang
+          // VÀ không có dòng STT+số liệu nào theo sau trong toàn bộ phần còn lại của trang).
+        }
+
         return blocks.length ? blocks : null;
       }
 
@@ -1851,7 +2161,7 @@
         return blocks.length ? blocks : null;
       }
 
-      let itemBlocks = parseTinhChatTemplateBlocks(rawLines);
+      let itemBlocks = parseTinhChatTemplateBlocks(rawLines, p > 1);
       if (!itemBlocks) itemBlocks = parseTinhChatTemplateBlocksLoose(rawLines);
       if (!itemBlocks) {
       itemBlocks = [];
@@ -2158,61 +2468,121 @@
   async function parseExcelInvoice(file) {
     const arrayBuffer = await readAsArrayBufferAsync(file);
     const wb = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1 });
-    
-    let headerIdx = rawRows.findIndex(r => r && r.some(c => /tên|mặt hàng/i.test(String(c))) && r.some(c => /đơn giá|giá/i.test(String(c))));
-    if (headerIdx === -1) headerIdx = 0;
-    
-    const headers = (rawRows[headerIdx] || []).map(h => String(h || '').trim());
-    const nameIdx = headers.findIndex(h => /tên/i.test(h));
-    const codeIdx = headers.findIndex(h => /^mã/i.test(h));
-    const priceIdx = headers.findIndex(h => /đơn giá|giá/i.test(h));
-    const qtyIdx = headers.findIndex(h => /số lượng|sl/i.test(h));
-    const unitIdx = headers.findIndex(h => /đơn vị|dvt/i.test(h));
-    // Chỉ nhận cột thực sự là "Thuế suất" hoặc chữ "VAT" đứng riêng, KHÔNG nhận nhầm
-    // các cột như "Thành tiền trước thuế" (chỉ chứa chữ "thuế" đơn lẻ, không phải % thuế).
-    const vatIdx = headers.findIndex(h => /thu[êeế]\s*su[âaấ]t|\bvat\b/i.test(h));
-    // Cột NCC/hãng (nếu file có sẵn), VD: "NCC", "Nhà cung cấp", "Hãng", "Nhãn hiệu"
-    const nccIdx = headers.findIndex(h => /ncc|nhà cung cấp|nha cung cap|hãng|nhãn hiệu/i.test(h));
-
-    // Nếu chưa dò được hãng chung của cả file từ tên file, thử dò từ tên sheet
-    if (!currentInvoiceSupplierBrand) {
-      currentInvoiceSupplierBrand = detectBrandKeyword(wb.SheetNames[0]);
-    }
-    // Dò tên NCC (tên công ty bán hàng) từ khối văn bản đầu file (các dòng trước header STT),
-    // nơi thường chứa "ĐƠN VỊ BÁN HÀNG (SELLER): CÔNG TY TNHH ... MAI THẢO" — so khớp với
-    // danh sách "Kho ngầm định" đã biết trong danh mục MISA để ưu tiên đúng NCC.
-    if (!currentInvoiceWarehouseTag) {
-      let headerBlockText = rawRows.slice(0, headerIdx).flat().filter(Boolean).join(' ');
-      currentInvoiceWarehouseTag = detectKnownWarehouseTag(headerBlockText) || detectKnownWarehouseTag(wb.SheetNames[0]);
-    }
 
     const parsed = [];
-    for (let i = headerIdx + 1; i < rawRows.length; i++) {
-      const r = rawRows[i];
-      if (!r || !r[nameIdx]) continue;
-      let rawName = String(r[nameIdx]).trim();
-      let explicitCode = codeIdx !== -1 ? String(r[codeIdx] || '').trim() : '';
-      let splitRes = splitPartCodeAndName(rawName);
-      let finalCode = explicitCode || splitRes.code;
 
-      // NCC riêng của từng dòng (ưu tiên cột NCC nếu có, sau đó dò trong chính tên hàng
-      // của dòng đó) - vì 1 file Excel toa/hóa đơn có thể gộp nhiều hãng khác nhau.
-      let rowBrand = nccIdx !== -1 ? detectBrandKeyword(String(r[nccIdx] || '')) : '';
-      if (!rowBrand) rowBrand = detectBrandKeyword(rawName);
+    // [fix] Một số phần mềm kế toán/quản lý kho (VD Bravo) xuất file dạng "Phiếu xuất kho
+    // hàng loạt" có 2 đặc điểm khác hẳn mẫu "Bảng kê hóa đơn" 1-sheet-1-khối thông thường:
+    // (1) TÁCH RIÊNG mỗi mức thuế suất GTGT ra MỘT SHEET khác nhau (VD sheet tên "8%", sheet
+    // tên "10%") trong CÙNG 1 file - nếu chỉ đọc đúng sheet đầu tiên (wb.SheetNames[0]) như
+    // trước đây sẽ BỎ SÓT hoàn toàn dữ liệu ở các sheet thuế suất còn lại; (2) trong CÙNG 1
+    // sheet, nối tiếp NHIỀU phiếu xuất kho/hóa đơn khác nhau, mỗi phiếu có dòng tiêu đề cột
+    // RIÊNG (lặp lại y hệt "Stt, Mã vật tư, Tên vật tư...") và luôn kết thúc bằng 1 dòng
+    // "Tổng cộng:". Nếu chỉ dò dòng tiêu đề ĐẦU TIÊN như cũ rồi đọc thẳng tới cuối sheet, các
+    // dòng tiêu đề lặp lại và dòng "Tổng cộng:" của những phiếu sau sẽ bị đọc NHẦM thành 1
+    // "mặt hàng" (vì cột Tên hàng của các dòng đó vẫn có chữ, VD "Tên vật tư" hoặc "Tổng
+    // cộng:"), làm bảng đối chiếu xuất hiện các dòng rác không có thật.
+    // Cách xử lý: (a) duyệt TẤT CẢ các sheet thay vì chỉ sheet đầu; (b) trong mỗi sheet, dò
+    // TẤT CẢ các dòng tiêu đề lặp lại để tách đúng ranh giới từng khối phiếu (dò lại đủ bộ
+    // cột riêng cho từng khối, phòng trường hợp thứ tự cột khác nhau giữa các khối); (c) loại
+    // bỏ dòng "Tổng cộng" khỏi kết quả; (d) nếu 1 sheet không có cột Thuế suất riêng từng
+    // dòng nhưng TÊN SHEET là 1 con số phần trăm (VD "8%"), dùng luôn mức thuế đó cho mọi
+    // dòng hàng trong sheet.
+    for (const sheetName of wb.SheetNames) {
+      const ws = wb.Sheets[sheetName];
+      const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-      parsed.push({
-        stt: parsed.length + 1,
-        rawName: rawName,
-        invCode: finalCode,
-        invName: splitRes.name,
-        unit: unitIdx !== -1 ? String(r[unitIdx] || '') : '',
-        qty: qtyIdx !== -1 ? Number(r[qtyIdx]) || 1 : 1,
-        price: priceIdx !== -1 ? Number(r[priceIdx]) || 0 : 0,
-        vat: vatIdx !== -1 ? normalizeVatValue(r[vatIdx]) : '',
-        invBrand: rowBrand
-      });
+      let headerIdxs = [];
+      for (let i = 0; i < rawRows.length; i++) {
+        const r = rawRows[i];
+        if (r && r.some(c => /tên|mặt hàng/i.test(String(c))) && r.some(c => /đơn giá|giá/i.test(String(c)))) {
+          headerIdxs.push(i);
+        }
+      }
+      if (headerIdxs.length === 0) continue; // sheet này không chứa bảng dữ liệu hóa đơn/xuất kho
+
+      if (!currentInvoiceSupplierBrand) {
+        currentInvoiceSupplierBrand = detectBrandKeyword(sheetName);
+      }
+      if (!currentInvoiceWarehouseTag) {
+        let headerBlockText = rawRows.slice(0, headerIdxs[0]).flat().filter(Boolean).join(' ');
+        currentInvoiceWarehouseTag = detectKnownWarehouseTag(headerBlockText) || detectKnownWarehouseTag(sheetName);
+      }
+
+      // Tên sheet dạng phần trăm thuần (VD "8%", "10%") -> dùng làm thuế suất mặc định cho
+      // mọi dòng trong sheet này khi không có cột Thuế suất riêng từng dòng.
+      const sheetVat = /^\s*\d+(?:[.,]\d+)?\s*%\s*$/.test(String(sheetName).trim()) ? normalizeVatValue(sheetName) : '';
+
+      for (let hi = 0; hi < headerIdxs.length; hi++) {
+        const headerIdx = headerIdxs[hi];
+        const blockEnd = hi + 1 < headerIdxs.length ? headerIdxs[hi + 1] : rawRows.length;
+
+        const headers = (rawRows[headerIdx] || []).map(h => String(h || '').trim());
+        const nameIdx = headers.findIndex(h => /tên/i.test(h));
+        if (nameIdx === -1) continue;
+        const codeIdx = headers.findIndex(h => /^mã/i.test(h));
+        // [fix] Một số mẫu "Bảng kê hóa đơn" xuất từ MISA có ĐỒNG THỜI cả 2 cột "Giá có thuế"
+        // (giá sau VAT) và "Giá trước thuế" (giá net, dùng để đối chiếu với Giá mua kho MISA vốn
+        // luôn lưu giá CHƯA thuế). Vì regex /đơn giá|giá/i khớp với TỪ "giá" ở cả 2 cột, nếu chọn
+        // đại cột "giá" đầu tiên gặp (thường "Giá có thuế" đứng trước "Giá trước thuế" trong các
+        // mẫu này) sẽ lấy NHẦM giá đã gồm VAT, khiến MỌI dòng hàng đều lệch giá đúng bằng % thuế
+        // suất (VD 10%) khi so với kho MISA - trông giống hệt "tăng giá" dù giá net thực tế không
+        // đổi. Ưu tiên: (1) cột đúng tên "Đơn giá" tuyệt đối, (2) cột có cụm "trước thuế" (giá
+        // net), (3) bất kỳ cột "giá" nào KHÔNG chứa "có thuế"/"sau thuế", (4) mới tới cột "giá"
+        // đầu tiên tìm thấy (hành vi cũ, dự phòng cho các mẫu chỉ có 1 cột giá duy nhất).
+        let priceIdx = headers.findIndex(h => /^đơn\s*giá$/i.test(h));
+        if (priceIdx === -1) priceIdx = headers.findIndex(h => /giá/i.test(h) && /trư[ớo]c\s*thu[êế]/i.test(h));
+        if (priceIdx === -1) priceIdx = headers.findIndex(h => /đơn giá|giá/i.test(h) && !/(có|sau)\s*thu[êế]/i.test(h));
+        if (priceIdx === -1) priceIdx = headers.findIndex(h => /đơn giá|giá/i.test(h));
+        const qtyIdx = headers.findIndex(h => /số lượng|sl/i.test(h));
+        // [fix] "Đvt" (viết tắt của "Đơn vị tính") không khớp alternative "dvt" trong regex cũ vì
+        // ký tự "Đ/đ" tiếng Việt là 1 mã Unicode HOÀN TOÀN KHÁC với "D/d" (kể cả sau toLowerCase),
+        // nên "Đvt" không bao giờ khớp được "dvt". Thêm hẳn alternative "đvt" để nhận đúng viết tắt
+        // rất phổ biến này trong các mẫu xuất kho/kế toán (VD Bravo).
+        let unitIdx = headers.findIndex(h => /đơn\s*vị|dvt|đvt/i.test(h));
+        // [fix] Một số mẫu "Bảng kê hóa đơn" MISA có cột Đơn vị tính nằm ngay SAU cột Tên hàng
+        // và TRƯỚC cột Số lượng, nhưng ô tiêu đề của cột đó bị BỎ TRỐNG (do gộp/format khi xuất
+        // Excel), nên không dò được unitIdx theo tên cột. Chỉ nhận diện khi có ĐÚNG 1 cột trống
+        // nằm xen giữa Tên hàng và Số lượng (đúng vị trí quy ước của ĐVT trong các mẫu này),
+        // tránh nhận nhầm ở các file có cấu trúc cột khác.
+        if (unitIdx === -1 && qtyIdx === nameIdx + 2 && !headers[nameIdx + 1]) {
+          unitIdx = nameIdx + 1;
+        }
+        // Chỉ nhận cột thực sự là "Thuế suất" hoặc chữ "VAT" đứng riêng, KHÔNG nhận nhầm
+        // các cột như "Thành tiền trước thuế" (chỉ chứa chữ "thuế" đơn lẻ, không phải % thuế).
+        const vatIdx = headers.findIndex(h => /thu[êeế]\s*su[âaấ]t|\bvat\b/i.test(h));
+        const nccIdx = headers.findIndex(h => /ncc|nhà cung cấp|nha cung cap|hãng|nhãn hiệu/i.test(h));
+
+        for (let i = headerIdx + 1; i < blockEnd; i++) {
+          const r = rawRows[i];
+          if (!r || !r[nameIdx]) continue;
+          let rawName = String(r[nameIdx]).trim();
+          if (!rawName) continue;
+          // Bỏ qua dòng "Tổng cộng" (dòng tổng kết mỗi khối phiếu, không phải mặt hàng thật)
+          if (/^t[ổo]ng\s*c[ộo]ng/i.test(rawName)) continue;
+
+          let explicitCode = codeIdx !== -1 ? String(r[codeIdx] || '').trim() : '';
+          let splitRes = splitPartCodeAndName(rawName);
+          let finalCode = explicitCode || splitRes.code;
+
+          // NCC riêng của từng dòng (ưu tiên cột NCC nếu có, sau đó dò trong chính tên hàng
+          // của dòng đó) - vì 1 file Excel toa/hóa đơn có thể gộp nhiều hãng khác nhau.
+          let rowBrand = nccIdx !== -1 ? detectBrandKeyword(String(r[nccIdx] || '')) : '';
+          if (!rowBrand) rowBrand = detectBrandKeyword(rawName);
+
+          parsed.push({
+            stt: parsed.length + 1,
+            rawName: rawName,
+            invCode: finalCode,
+            invName: splitRes.name,
+            unit: unitIdx !== -1 ? String(r[unitIdx] || '') : '',
+            qty: qtyIdx !== -1 ? Number(r[qtyIdx]) || 1 : 1,
+            price: priceIdx !== -1 ? Number(r[priceIdx]) || 0 : 0,
+            vat: vatIdx !== -1 ? normalizeVatValue(r[vatIdx]) : sheetVat,
+            invBrand: rowBrand
+          });
+        }
+      }
     }
     return parsed;
   }
