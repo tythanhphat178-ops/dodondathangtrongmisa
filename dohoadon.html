@@ -928,8 +928,19 @@
     // gạch ngang đầu) là CHUỖI SỐ THUẦN dài >=4 chữ số (số hiệu catalog gốc của hãng) -
     // KHÔNG BAO GIỜ bắt đầu bằng chữ cái như "AH". Bổ sung điều kiện này để phân biệt mã
     // catalog thật với model number lẫn trong tên hàng, tránh tách nhầm.
+    // [Bugfix mã có HẬU TỐ 1 CHỮ CÁI sau đoạn số đầu, VD "4053A-VC1-0000 Bộ Nhông Tải Và
+    // Xích Tải", "4312B-M9B-0000 Bộ Má Phanh", "3340A-VD3-0002 Bộ Đèn Xi Nhan Trước" (hóa đơn
+    // NCC Hồng Thái, mẫu C26MHT). Điều kiện gốc chỉ chấp nhận đoạn đầu THUẦN SỐ (/^\d{4,}$/),
+    // nên các mã catalog có 1 chữ cái phân loại ngay sau dãy số (rất phổ biến, tương tự quy
+    // ước "4053A"/"4312B" ở trên) bị RỚT khỏi Rule 1 này. Do vẫn thỏa điều kiện của Rule 2
+    // (Honda, bên dưới) - vốn chỉ cắt tại dấu gạch nối ĐẦU TIÊN - mã bị tách sai thành
+    // code="4053A", name="VC1-0000 Bộ Nhông Tải Và Xích Tải" (phần đuôi mã "VC1-0000" dính
+    // nhầm vào đầu tên hàng) thay vì code="4053A-VC1-0000", name="Bộ Nhông Tải Và Xích Tải"
+    // đúng - sai khi đối chiếu Mã hàng lẫn Tên hàng với danh mục MISA. Cho phép thêm tối đa 1
+    // chữ cái ngay sau đoạn số vẫn AN TOÀN vì vẫn đòi hỏi bắt đầu bằng chữ SỐ - phân biệt hẳn
+    // với model number kiểu "AH-378-T" (bắt đầu bằng CHỮ CÁI) vốn là lý do Rule 1 bị thắt chặt.
     let firstSegBeforeHyphen = first.split('-')[0];
-    if (tokens.length > 1 && hyphenCountFirst >= 2 && /^[A-Za-z0-9+\-]{5,25}$/.test(first) && /^\d{4,}$/.test(firstSegBeforeHyphen)) {
+    if (tokens.length > 1 && hyphenCountFirst >= 2 && /^[A-Za-z0-9+\-]{5,25}$/.test(first) && /^\d{4,}[A-Za-z]?$/.test(firstSegBeforeHyphen)) {
       let firstClean = cleanCode(first);
       if (firstClean.length >= 5 && /\d/.test(firstClean) && !first.endsWith('-')) {
         return { code: first, name: tokens.slice(1).join(' ').trim() };
@@ -1045,7 +1056,9 @@
     if (tokens.length > 1 && /^[A-Za-z0-9+\-]{5,25}$/.test(first)) {
       let firstSegBeforeHyphen4 = first.split('-')[0];
       let hasHyphen4 = first.includes('-');
-      let passesModelNumberGuard = !hasHyphen4 || /^\d{4,}$/.test(firstSegBeforeHyphen4);
+      // Đồng bộ với Rule 1: cho phép đoạn đầu có thêm tối đa 1 chữ cái hậu tố sau dãy số
+      // (VD "4053A", "4312B") - xem chú thích bugfix chi tiết tại Rule 1 phía trên.
+      let passesModelNumberGuard = !hasHyphen4 || /^\d{4,}[A-Za-z]?$/.test(firstSegBeforeHyphen4);
       let firstClean = cleanCode(first);
       if (passesModelNumberGuard && firstClean.length >= 5 && /\d/.test(firstClean) && !first.endsWith('-')) {
         return { code: first, name: tokens.slice(1).join(' ').trim() };
@@ -1340,7 +1353,8 @@
         let items = content.items.map(it => ({
           str: it.str.trim(),
           x: it.transform[4],
-          y: it.transform[5]
+          y: it.transform[5],
+          width: typeof it.width === 'number' ? it.width : null
         })).filter(it => it.str.length > 0);
 
         let yGroups = new Map();
@@ -1359,10 +1373,59 @@
           yGroups.get(matchedY).push(item);
         }
 
+        // [Bugfix - NCC Trường Thiên Bảo, mẫu bilingual Việt/Anh] 1 số hóa đơn render TỪNG
+        // KÝ TỰ CÓ DẤU (ó, ộ, ẹ, ì...) của 1 TỪ thành 1 "text run" RIÊNG BIỆT, tách khỏi phần
+        // chữ không dấu đứng ngay trước/sau nó trong CÙNG 1 từ (VD chữ "Khóa" bị PDF tách
+        // thành 3 mảnh liền kề "Kh" + "ó" + "a Vuong..."). Trước đây, việc GHÉP các "text run"
+        // trong cùng 1 dòng (cùng tọa độ Y) LUÔN chèn thêm 1 dấu cách ở GIỮA MỌI cặp mảnh
+        // (join(' ')), bất kể giữa 2 mảnh đó có khoảng trống thật hay không - điều này vốn vô
+        // hại với các mẫu hóa đơn khác (nơi dấu cách thật giữa các "ô cột" luôn đã có sẵn là 1
+        // "text run" riêng dạng " ", nên có lỡ chèn thêm dấu cách thừa cũng chỉ tạo khoảng
+        // trắng KÉP vô hại) - nhưng lại chèn NHẦM dấu cách vào GIỮA các mảnh ký tự liền kề
+        // KHÔNG có khoảng trống thật (mảnh sau bắt đầu ĐÚNG tại vị trí mảnh trước kết thúc),
+        // biến "Khóa" thành "Kh ó a" sai lệch. Để phân biệt "khoảng trống thật" (cần chèn dấu
+        // cách) với "2 mảnh ký tự dính liền nhau" (không cần), dùng thuộc tính `width` sẵn có
+        // của pdf.js TextItem (độ rộng hiển thị thực tế của text run, cùng đơn vị tọa độ với
+        // `transform[4]`) để tính khoảng hở = x(mảnh sau) - [x(mảnh trước) + width(mảnh
+        // trước)]. Chỉ chèn dấu cách khi khoảng hở này lớn hơn ngưỡng nhỏ (loại nhiễu làm
+        // tròn số) - khi 2 mảnh dính sát nhau (khoảng hở ~ 0, thậm chí hơi âm), ghép thẳng
+        // không thêm gì. Nếu thiếu `width` (trường hợp hiếm/phòng hờ), tự động lùi về hành vi
+        // CŨ (luôn chèn dấu cách) để không đổi hành vi trên các dòng đã hoạt động đúng.
+        const RAWLINE_GAP_THRESHOLD_PT = 2.0;
+        // [Bugfix - NCC Khang Mỹ Phát, mẫu bilingual, tên hàng "Vỏ Michelin..." dài phải ngắt
+        // 2 DÒNG VẬT LÝ] Khoảng cách dung sai gom nhóm theo Y (±4.5) đôi khi khiến DÒNG DỮ LIỆU
+        // (ĐVT/SL/Đơn giá/Thành tiền, nằm ở tọa độ Y NẰM GIỮA 2 dòng tên hàng bị ngắt) bị gom
+        // CHUNG 1 nhóm Y với CẢ 2 dòng vật lý của tên hàng (dòng 1 cách dòng dữ liệu 3.75, dòng 2
+        // cách dòng dữ liệu 4.5 - cả hai đều lọt ngưỡng dung sai dù bản thân 2 dòng tên hàng cách
+        // nhau tới 8.25, vượt ngưỡng). Khi đó dòng 2 của tên hàng bị "chen" ngay sau dòng 1 với
+        // tọa độ X y hệt TỪ ĐẦU (vì cả 2 dòng đều canh trái cùng 1 mép cột) thay vì nối tiếp theo
+        // sau dòng 1 - khiến khoảng hở tính được RẤT ÂM (dòng 2 "chồng lấn" ngược lại từ đầu dòng
+        // 1, hoàn toàn khác với 2 mảnh ký tự dính liền thật sự trong CÙNG 1 dòng, vốn luôn có
+        // khoảng hở quanh 0 và KHÔNG BAO GIỜ âm sâu). Ví dụ "...REINF CITY" (dòng 1) + "EXTRA TL"
+        // (dòng 2, X trùng dòng 1) bị ghép dính thành "...REINF CITYEXTRA TL" thay vì đúng
+        // "...REINF CITY EXTRA TL". Nhận diện: khoảng hở ÂM SÂU (vượt xa mức nhiễu làm tròn của
+        // trường hợp dính liền thật) là dấu hiệu chắc chắn của 2 dòng vật lý khác nhau bị gom
+        // nhầm - khi đó vẫn chèn dấu cách để tên hàng nối đúng, dù nhóm Y vẫn bị gộp chung.
+        const RAWLINE_NEGATIVE_GAP_THRESHOLD_PT = -5.0;
         let linesData = [];
         for (let [y, group] of yGroups.entries()) {
           group.sort((a, b) => a.x - b.x);
-          let lineStr = group.map(i => i.str).join(' ').trim();
+          let parts = [];
+          let prevEndX = null;
+          for (let item of group) {
+            if (prevEndX !== null) {
+              if (item.width !== null && prevEndX !== false) {
+                let gap = item.x - prevEndX;
+                if (gap > RAWLINE_GAP_THRESHOLD_PT || gap < RAWLINE_NEGATIVE_GAP_THRESHOLD_PT) parts.push(' ');
+              } else {
+                // Thiếu width ở mảnh trước hoặc mảnh này - lùi về hành vi cũ để an toàn.
+                parts.push(' ');
+              }
+            }
+            parts.push(item.str);
+            prevEndX = (item.width !== null) ? (item.x + item.width) : false;
+          }
+          let lineStr = parts.join('').replace(/\s+/g, ' ').trim();
           linesData.push([y, lineStr]);
         }
 
@@ -1389,6 +1452,40 @@
         else linesData.sort((a,b) => a[0] - b[0]);
 
         rawLines = linesData.map(l => l[1]);
+
+        // [v46] Mẫu hóa đơn MISA cột "Tính chất" (VD NCC Angimex Furious) có cột Đơn giá RẤT
+        // HẸP: khi Đơn giá là số thập phân dài (Thành tiền chia không tròn cho Số lượng, ví dụ
+        // "1.001.520,333333"), PDF phải xuống tới 3 DÒNG VẬT LÝ cho riêng ô Đơn giá. Vì cách
+        // gom dòng ở NHÁNH NÀY dựa vào tọa độ Y (không phải theo thứ tự đọc tự nhiên trong PDF
+        // như nhánh "hasMultiLine"), 3 mảnh số này lại nằm NGANG HÀNG với 3 dòng của cột "Tính
+        // chất" bên cạnh (vốn LUÔN có đúng 3 dòng cố định "Hàng"/"hóa,"/"dịch vụ") thay vì nằm
+        // liền kề nhau: mảnh ĐẦU ("1.001.52") bị dính vào dòng "Hàng" (dòng 1 tính chất, đứng
+        // TRƯỚC cả dòng chứa STT+Tên hàng), còn mảnh CUỐI ("3") bị dính vào dòng "dịch vụ" (dòng
+        // 3 tính chất, đứng SAU dòng chính) - chỉ riêng mảnh GIỮA ("0,33333") là nằm đúng trên
+        // dòng chính cùng STT/Tên hàng/Số lượng. Nếu không xử lý, mảnh "1.001.52" bị hiểu nhầm
+        // thành tên hàng mồ côi (dính vào Tên hàng dòng kế tiếp) và "0,33333" bị hiểu SAI thành
+        // TOÀN BỘ Đơn giá (chỉ bằng 1 phần rất nhỏ giá trị thật), làm sai lệch cả Tên hàng lẫn
+        // Đơn giá của đúng dòng hàng đó. Nhận diện & khôi phục: 1 dòng CHỈ gồm marker mở tính
+        // chất ("Hàng"/"Khuyến"/"Ghi") + ĐÚNG 1 số bị cắt cụt nhóm nghìn cuối (không có nội dung
+        // nào khác - không bao giờ xảy ra ở dòng tính chất hợp lệ bình thường) chắc chắn là mảnh
+        // Đơn giá bị lạc; ghép nó làm TIỀN TỐ cho số thập phân ngắn nằm trên dòng kế tiếp (dòng
+        // chính), đồng thời dòng NGAY SAU dòng chính nếu CHỈ gồm marker đóng tính chất ("dịch
+        // vụ"/"mại"/"giải") + ĐÚNG 1-2 chữ số thuần thì ghép nốt số đó vào ĐUÔI phần thập phân.
+        for (let li = 1; li < rawLines.length - 1; li++) {
+          let mPrefix = rawLines[li - 1].match(/^(hàng|khuyến|ghi)\s+(\d{1,3}(?:\.\d{3})*\.\d{1,2})$/i);
+          if (!mPrefix) continue;
+          let mainLine = rawLines[li];
+          let mDecimal = mainLine.match(/(^|\s)(\d{1,2},\d{2,8})(\s|$)/);
+          if (!mDecimal) continue;
+          let fixedNum = mPrefix[2] + mDecimal[2];
+          let mSuffix = rawLines[li + 1].match(/^(dịch\s*vụ|mại|giải)\s+(\d{1,2})$/i);
+          if (mSuffix) {
+            fixedNum += mSuffix[2];
+            rawLines[li + 1] = mSuffix[1];
+          }
+          rawLines[li] = mainLine.slice(0, mDecimal.index) + mDecimal[1] + fixedNum + mDecimal[3] + mainLine.slice(mDecimal.index + mDecimal[0].length);
+          rawLines[li - 1] = mPrefix[1];
+        }
       }
 
       // [v29] Một số PDF (lỗi font/ToUnicode CMap của phần mềm phát hành hóa đơn) thỉnh
@@ -1440,10 +1537,36 @@
       // 3 chữ số theo quy tắc định dạng chuẩn - số hợp lệ thật sự KHÔNG BAO GIỜ kết thúc bằng 1
       // nhóm thiếu chữ số như vậy - và dòng NGAY SAU nó chỉ vỏn vẹn 1-2 chữ số, không lẫn ký tự
       // nào khác (chắc chắn là phần đuôi số bị cắt, không phải 1 dòng nội dung khác như STT).
+      // [v45] Biến thể NẶNG HƠN của lỗi v34: có mẫu hóa đơn MISA cột "Tính chất" (VD NCC
+      // Angimex Furious) canh cột Đơn giá HẸP đến mức 1 con số THẬP PHÂN dài (Đơn giá lẻ do
+      // Thành tiền chia không tròn cho Số lượng, ví dụ "1.001.520,333333") bị PDF cắt tới
+      // TẬN 3 DÒNG VẬT LÝ thay vì 2 như v34: "1.001.52" / "0,33333" / "3" - điểm ngắt dòng
+      // ĐẦU TIÊN rơi đúng ngay trước dấu phẩy thập phân (giữa nhóm nghìn cuối "520" thành
+      // "52"+"0"), khiến dòng kế tiếp không còn là "1-2 chữ số thuần" như v34 kỳ vọng mà lại
+      // là "chữ số + dấu phẩy + phần thập phân" ("0,33333"). Nếu không xử lý, v34 không khớp
+      // (do rawLines[li+1] không thỏa "^\\d{1,2}$"), khiến dòng "1.001.52" bị lọt ra ngoài
+      // thành 1 mảnh tên hàng "mồ côi" (dính nhầm vào Tên hàng của dòng KẾ TIẾP) còn "0,33333"
+      // bị hiểu sai thành TOÀN BỘ Đơn giá (đúng ra chỉ là phần đuôi), làm sai lệch cả Tên hàng
+      // lẫn Đơn giá của dòng hàng đó. Nhận diện: dòng trước có nhóm nghìn cuối bị cắt còn 1-2
+      // chữ số (y hệt điều kiện v34), dòng SAU khớp "1-2 chữ số + dấu phẩy + phần thập phân"
+      // thay vì thuần số - ghép trực tiếp không thêm khoảng trắng để tạo thành số thập phân
+      // hợp lệ (sai lệch phần thập phân ở vị trí phần triệu rất nhỏ, không ảnh hưởng số tiền
+      // hiển thị làm tròn theo đồng).
       for (let li = 0; li < rawLines.length - 1; li++) {
         if (/^\d{1,3}(?:\.\d{3})*\.\d{1,2}$/.test(rawLines[li]) && /^\d{1,2}$/.test(rawLines[li + 1])) {
           rawLines[li] = rawLines[li] + rawLines[li + 1];
           rawLines.splice(li + 1, 1);
+        } else if (/^\d{1,3}(?:\.\d{3})*\.\d{1,2}$/.test(rawLines[li]) && /^\d{1,2},\d+$/.test(rawLines[li + 1])) {
+          rawLines[li] = rawLines[li] + rawLines[li + 1];
+          rawLines.splice(li + 1, 1);
+          // [v45] Phần đuôi thập phân đôi khi còn bị cắt tiếp lần NỮA (dòng thứ 3), ví dụ
+          // "3" đứng lẻ ngay sau "0,33333" (đủ 6 chữ số thập phân "333333" thay vì 5). Sau khi
+          // vừa ghép xong ở trên, nếu dòng NGAY SAU (nay đã dịch lên đúng vị trí li+1) chỉ vỏn
+          // vẹn 1-2 chữ số thuần, ghép nốt luôn vào cuối phần thập phân.
+          if (li + 1 < rawLines.length && /^\d{1,2}$/.test(rawLines[li + 1])) {
+            rawLines[li] = rawLines[li] + rawLines[li + 1];
+            rawLines.splice(li + 1, 1);
+          }
         }
       }
 
@@ -1498,7 +1621,18 @@
       // đây là cột Đơn vị tính, làm ĐVT bị mặc định sai thành "Chiếc" và chữ "Cục" bị dính
       // nhầm vào cuối Tên hàng (VD "Mobin lửa 6 tép Dr AVP Cục" thay vì tên đúng "Mobin lửa 6
       // tép Dr AVP" với ĐVT "Cục").
-      const UNIT_TOKEN_RE_PDF = /^(chiếc|cái|cai|con|bộ|bình|lít|hộp|kg|mét|lô|cuộn|tấm|tám|lon|chai|can|xô|phuy|cụm|cục|thùng|gói|bao|kiện|đôi|túi|bó|vỉ|vĩ|ống|tá|cây|sợi|cặp|tuýp|tuyp|hũ|hủ|thanh|viên|chùm|ly|xấp|bánh)$/i;
+      // [Bugfix] Bổ sung "lá" (ĐVT của NCC Đức Ký cho hàng dạng tấm mỏng như lá ma sát/bố
+      // nồi, VD "Lá ma sát (Bố nồi Kf) L22201-107-000" bán theo ĐVT "Lá") - trước đây thiếu
+      // "lá" khiến extractDataTail không nhận ra token này ở CỘT ĐVT trên dòng dữ liệu (dòng
+      // "1 Lá 420 11.000 4.620.000 8% 369.600"), làm ĐVT bị mặc định sai thành "Chiếc" VÀ chữ
+      // "Lá" bị coi là phần còn sót của TÊN HÀNG. Do mặt hàng này còn bị PDF ngắt dòng giữa mã
+      // phụ tùng ("L22201-107-" + "000"), phần "Lá" sót lại đó bị nối lẫn vào GIỮA 2 mảnh tên,
+      // biến tên đúng "Lá ma sát (Bố nồi Kf) L22201-107-000" thành tên sai "Lá ma sát (Bố nồi
+      // Kf) L22201-107-Lá 000". Vì UNIT_TOKEN_RE_PDF chỉ được so khớp ở ĐÚNG 1 vị trí cố định
+      // (token liền kề ngay TRƯỚC số lượng khi dò ngược từ phải sang trái trong extractDataTail),
+      // việc thêm "lá" vào đây an toàn, không gây nhận nhầm với chữ "lá" xuất hiện ở vị trí khác
+      // trong tên hàng (như "Lá ma sát" ở đầu tên).
+      const UNIT_TOKEN_RE_PDF = /^(chiếc|cái|cai|con|bộ|bình|lít|hộp|kg|mét|lô|cuộn|tấm|tám|lon|chai|can|xô|phuy|cụm|cục|thùng|gói|bao|kiện|đôi|túi|bó|vỉ|vĩ|ống|tá|cây|sợi|cặp|tuýp|tuyp|hũ|hủ|thanh|viên|chùm|ly|xấp|bánh|lá)$/i;
       // [v36] "tám" (dấu sắc, không mũ - nghĩa gốc là số "8") được chấp nhận ở VỊ TRÍ ĐVT vì
       // trên thực tế NCC hay gõ NHẦM dấu "Tấm" (ấ) thành "Tám" (á) khi lập hóa đơn (ví dụ dòng
       // "...CAO SU TÁM 20,00..." thay vì "...CAO SU TẤM 20,00..."). Nhầm lẫn CHỈ xảy ra ở đúng
@@ -1586,6 +1720,36 @@
           if (!HEADER_VOCAB_PDF.has(removeVietnameseTones(w).toLowerCase())) return false;
         }
         return true;
+      }
+
+      // [Bugfix dòng đánh số cột dạng "(1) (2) (3) (4) (5) (6)=(4)x(5)" - MỖI SỐ bọc ngoặc
+      // đơn RIÊNG (hóa đơn NCC Quốc Tế An Thịnh Phát, mẫu C26TTP). Quy tắc cũ (/6=4x5/i và
+      // /^1\s+2\s+3\s+4\s+5/i) chỉ nhận diện được dạng viết liền không ngoặc ("6=4x5") hoặc
+      // các số cách nhau bằng khoảng trắng thuần ("1 2 3 4 5"), KHÔNG khớp được biến thể này
+      // vì mỗi số đều có cặp ngoặc đơn bao quanh riêng. Hậu quả nghiêm trọng: dòng đánh số
+      // cột này lọt qua mọi bộ lọc, bị hiểu nhầm thành 1 mảnh "tên hàng mồ côi" đứng NGAY
+      // TRƯỚC mặt hàng STT=1 thật, cộng dồn sai fragCount của khối "chờ" đầu tiên -> kéo
+      // theo expectedSuffixCount (số dòng đuôi cần chờ) bị thừa 1, khiến khối STT=1 nuốt
+      // luôn dòng tên hàng ĐẦU TIÊN của mặt hàng STT=2 vào phần đuôi của chính nó. Vì mẫu
+      // hóa đơn này có đặc điểm: dòng chứa STT+ĐVT+SL+Đơn giá+Thành tiền của mỗi mặt hàng
+      // (khi tên hàng dài phải ngắt 2 dòng) hoàn toàn KHÔNG mang theo tên hàng (tên hàng nằm
+      // trọn ở 2 dòng mồ côi bao quanh phía trên/dưới do PDF canh giữa theo chiều dọc), việc
+      // mất dòng tên đầu của mặt hàng STT=2 khiến khối chờ của STT=2 không còn tồn tại khi
+      // dòng data của nó xuất hiện - khối mới phải mở thẳng NGAY TẠI dòng STT+data (không có
+      // tên hàng đi kèm), khiến extractDataTail thất bại (dataFound mãi vẫn false), rồi bị
+      // finalizeBlock() ÂM THẦM VỨT BỎ toàn bộ khi mặt hàng kế tiếp xuất hiện - RỚT MẤT hàng
+      // loạt mặt hàng liên tiếp (chỉ mặt hàng đầu tiên và các mặt hàng tình cờ gói gọn tên+
+      // data trên đúng 1 dòng duy nhất mới sống sót, sai lệch nghiêm trọng Tổng cộng tiền
+      // hàng khi đối chiếu). Nhận diện tổng quát: 1 dòng mà sau khi bỏ hết khoảng trắng CHỈ
+      // còn lại ký tự thuộc tập ngoặc/chữ số/"="/"x" (không có bất kỳ chữ cái chữ thường/hoa
+      // hay dấu tiếng Việt nào - tên hàng/mã hàng thật LUÔN có ít nhất 1 chữ cái) VÀ có từ 3
+      // cặp dấu ngoặc mở "(" trở lên - chắc chắn là dòng đánh số thứ tự cột, an toàn để loại bỏ.
+      function isColumnNumberingLinePDF(line) {
+        let compact = String(line || '').replace(/\s+/g, '');
+        if (!compact) return false;
+        if (!/^[()\d=x×]+$/i.test(compact)) return false;
+        let parenCount = (compact.match(/\(/g) || []).length;
+        return parenCount >= 3;
       }
 
       // [v27] Cắt bỏ số trang kiểu " 1/3" / " Trang 2/3" dính vào CUỐI tên hàng (do PDF nối
@@ -1702,10 +1866,22 @@
         }
         idx--;
 
+        // [v44 - Hóa đơn điều chỉnh giảm/hóa đơn thay thế mang dấu ÂM] Một số hóa đơn "điều
+        // chỉnh cho hóa đơn số N" (loại giảm) in TOÀN BỘ Số lượng/Thành tiền dưới dạng số ÂM
+        // (VD "CÁI -3 0 -2.820.000 8%", NCC Hà Vy hóa đơn #7 điều chỉnh giảm hóa đơn #6), với
+        // Đơn giá thường bị in là 0 dù Thành tiền khác 0 - đây là cách MISA/phần mềm hóa đơn
+        // điện tử thể hiện dòng điều chỉnh, không phải lỗi trích xuất. Điều kiện cũ chỉ chấp
+        // nhận Số lượng DƯƠNG (qtyParsed > 0) khiến token số lượng âm (VD "-3") bị coi là
+        // "không phải số lượng hợp lệ", rơi xuống nhánh mặc định (qty=1, unit='Chiếc') mà
+        // KHÔNG "tiêu thụ" token số lượng lẫn token ĐVT đứng trước nó - hệ quả: cả 2 token này
+        // ("CÁI" và "-3") bị kẹt lại giữa tên hàng, tạo ra tên hàng rác kiểu "Đèn LED ZHI.PAT
+        // Funeo Fi CÁI -3 Sportline - màu đen cam" thay vì tên hàng sạch với qty=-3, unit=CÁI.
+        // Sửa: chấp nhận cả số lượng ÂM (chỉ loại trừ đúng giá trị 0, vì 0 không phải số lượng
+        // hợp lệ cho 1 dòng hàng thật), dùng trị tuyệt đối khi so sánh ngưỡng tối đa hợp lý.
         let qty, unit;
         let qtyToken = tokens[idx];
         let qtyParsed = parseNum(qtyToken);
-        if (qtyParsed !== null && qtyParsed > 0 && qtyParsed < 1000000) {
+        if (qtyParsed !== null && qtyParsed !== 0 && Math.abs(qtyParsed) < 1000000) {
           qty = qtyParsed;
           idx--;
           // [v24] Chỉ coi là đã "tiêu thụ" 1 token ĐVT thật khi token đó THỰC SỰ tồn tại
@@ -1828,7 +2004,19 @@
             // tên hàng hiện đang kết thúc bằng dấu "-" (mã hàng/số hiệu bị ngắt dòng giữa
             // chừng, ví dụ "...HM -" rồi "0103194 ( Euromina)"), HOẶC kết thúc bằng chính dấu
             // "(" (mở ngoặc chờ đóng).
-            let needsClose = opens > closes || /[-(]$/.test(acc.trim());
+            // [v45 - Bugfix cụm "Xuất xứ <Tên nước>" bị ngắt đúng ranh giới khối, phần TÊN NƯỚC
+            // (viết hoa chữ cái đầu, VD "Thailand", "Malaysia") rơi xuống dòng mồ côi NGAY SAU
+            // mốc đóng "dịch vụ" của khối này - hóa đơn NCC Vạn Hào Phát #0000024, mặt hàng 1/2:
+            // tên hàng 1 kết thúc "...Xuất xứ" rồi "Thailand" đứng lẻ 1 dòng NGAY TRƯỚC "Hàng"
+            // của mặt hàng 2. Do "Thailand" viết hoa chữ cái đầu (không khớp dấu hiệu "tiếp nối"
+            // hiện có: mở đầu bằng "()-" hoặc chữ THƯỜNG), nó bị coi nhầm là ĐÃ hết phần đuôi,
+            // gán oan thành carriedPrefix cho ĐẦU tên hàng mặt hàng 2 (kết quả: "Thailand Dĩa
+            // trước (Nhông)..." thay vì tên hàng 1 phải kết thúc "...Xuất xứ Thailand" và tên
+            // hàng 2 giữ nguyên "Dĩa trước..."). Từ "xứ" gần như KHÔNG BAO GIỜ là từ cuối cùng
+            // hợp lệ của 1 tên hàng hoàn chỉnh khi đứng riêng - luôn là phần đầu dở dang của cụm
+            // "xuất xứ" + tên nước theo sau, nên coi tên hàng hiện kết thúc bằng đúng từ "xứ" là
+            // dấu hiệu ĐÁNG TIN CẬY cần tiếp tục nối dòng kế tiếp vào đuôi, bất kể chữ hoa/thường.
+            let needsClose = opens > closes || /[-(]$/.test(acc.trim()) || /(^|\s)xứ$/i.test(acc.trim());
             let cand = buffer[idx];
             // [v42 - Bugfix đuôi câu mô tả bị ngắt dòng thành 1 mảnh SỐ/PHẦN TRĂM đứng riêng
             // (VD "...điện áp 12V, công suất: 35w.Mới" rồi "100%" đứng 1 mình 1 dòng, hóa đơn
@@ -2234,7 +2422,23 @@
         if (STOP_RE_PDF.test(lineClean)) { finalizeBlock(); continue; }
         if (HEADER_FRAG_RE_PDF.test(lineClean)) { finalizeBlock(); continue; }
         if (isHeaderVocabOnlyLine(lineClean)) { finalizeBlock(); continue; }
-        if (/6=4x5/i.test(lineClean) || /^1\s+2\s+3\s+4\s+5/i.test(lineClean)) { finalizeBlock(); continue; }
+        if (/6=4x5/i.test(lineClean) || /^1\s+2\s+3\s+4\s+5/i.test(lineClean) || isColumnNumberingLinePDF(lineClean)) { finalizeBlock(); continue; }
+        // [v46 - Bugfix dòng ghi chú "Thay thế cho hóa đơn..." bị nuốt làm tiền tố tên hàng
+        // mặt hàng #1, kéo theo nuốt LUÔN CẢ mặt hàng #2] Hóa đơn thay thế (điều chỉnh 1 hóa
+        // đơn trước đó) thường in thêm 1 dòng ghi chú riêng "Thay thế cho hóa đơn Mẫu số...
+        // ký hiệu... số... ngày..." nằm NGAY GIỮA dòng tiêu đề cột số ("1 2 3 4 5 6=4x5...")
+        // và dòng hàng hóa STT=1 đầu tiên (NCC JMS hóa đơn #00000060 thay thế #00000057, mẫu
+        // bảng "1 dòng liền mạch" kiểu ehoadon.vn/Bkav - không có STT dẫn đầu, không khớp bất
+        // kỳ mốc STOP_RE_PDF/HEADER_FRAG_RE_PDF nào đã biết). Do dòng này không có số STT lẫn
+        // số liệu đi kèm, nó bị hiểu nhầm thành 1 khối "chờ" (mảnh tên hàng mồ côi, y hệt các
+        // dòng đầu tên hàng hợp lệ), rồi khi gặp dòng "1 Tên hàng... 8%" ngay sau, được ghép
+        // làm tiền tố tên hàng của mặt hàng #1 (đúng số liệu SL/Giá/Tiền của #1) NHƯNG lại đặt
+        // expectedSuffixCount=1 (vì khối "chờ" có 1 dòng mồ côi phía trước), khiến dòng hàng
+        // #2 kế tiếp ("2 Tên hàng... 8%") bị hiểu nhầm thành "phần đuôi đang chờ" của mặt hàng
+        // #1 thay vì là 1 mặt hàng độc lập mới - toàn bộ số liệu SL/ĐVT/Giá của #2 bị nuốt mất
+        // vào tên hàng #1, mặt hàng #2 biến mất khỏi kết quả. Nhận diện và loại bỏ dòng ghi chú
+        // này NGAY, giống các dòng tiêu đề khác, để nó không bao giờ trở thành khối "chờ".
+        if (/^thay\s*th[ếe]\s*cho\s*h[óo]a\s*đơn\b/i.test(lineClean)) { finalizeBlock(); continue; }
 
         let isContinuation = isContinuationTail(currBlock);
 
