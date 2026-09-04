@@ -1053,7 +1053,16 @@
     // có điều kiện đó) bắt nhầm y hệt. Chỉ bỏ qua kiểm tra "đoạn đầu là số" khi từ đầu
     // KHÔNG chứa gạch nối (mã đơn giản 1 đoạn thuần chữ-số, ví dụ "05T123" - không có
     // định dạng "chữ-số-chữ" nhiều đoạn dễ nhầm với model number).
-    if (tokens.length > 1 && /^[A-Za-z0-9+\-]{5,25}$/.test(first)) {
+    // [v50 - Bugfix mã hàng có ký tự "@" ở giữa, VD "GP3503@02" (hóa đơn NCC Minh Tiến,
+    // sản phẩm "WAVEAPHA Khóa chữ gạo bộ", lặp lại y hệt ở nhiều hóa đơn khác nhau nên
+    // chắc chắn là mã thật của NCC, không phải lỗi OCR/font ngẫu nhiên). Charset gốc của
+    // Rule 4 chỉ cho phép chữ-số-gạch nối-dấu cộng, KHÔNG có "@", nên toàn bộ token đầu bị
+    // rớt khỏi Rule 4, khiến invCode bị bỏ trống và invName hiển thị dính nguyên cả mã phía
+    // trước tên hàng ("GP3503@02 WAVEAPHA Khóa chữ gạo bộ" thay vì code="GP3503@02",
+    // name="WAVEAPHA Khóa chữ gạo bộ") - sai khi đối chiếu Mã hàng với danh mục MISA. Bổ
+    // sung "@" vào charset cho phép - an toàn vì cleanCode() đã loại bỏ "@" trước khi kiểm
+    // tra độ dài/có chữ số, và toàn bộ điều kiện vẫn chỉ áp dụng cho TỪ ĐẦU TIÊN của tên hàng.
+    if (tokens.length > 1 && /^[A-Za-z0-9+\-@]{5,25}$/.test(first)) {
       let firstSegBeforeHyphen4 = first.split('-')[0];
       let hasHyphen4 = first.includes('-');
       // Đồng bộ với Rule 1: cho phép đoạn đầu có thêm tối đa 1 chữ cái hậu tố sau dãy số
@@ -1632,7 +1641,14 @@
       // (token liền kề ngay TRƯỚC số lượng khi dò ngược từ phải sang trái trong extractDataTail),
       // việc thêm "lá" vào đây an toàn, không gây nhận nhầm với chữ "lá" xuất hiện ở vị trí khác
       // trong tên hàng (như "Lá ma sát" ở đầu tên).
-      const UNIT_TOKEN_RE_PDF = /^(chiếc|cái|cai|con|bộ|bình|lít|hộp|kg|mét|lô|cuộn|tấm|tám|lon|chai|can|xô|phuy|cụm|cục|thùng|gói|bao|kiện|đôi|túi|bó|vỉ|vĩ|ống|tá|cây|sợi|cặp|tuýp|tuyp|hũ|hủ|thanh|viên|chùm|ly|xấp|bánh|lá)$/i;
+      // [v47] Bổ sung "lọ" (ĐVT của NCC Hộ kinh doanh Nguyễn Thị Hồng cho hàng dạng chai/lọ nhỏ,
+      // VD "Keo nước P2407 pax" bán theo ĐVT "Lọ") - trước đây thiếu "lọ" khiến extractDataTail
+      // không nhận ra token này ở CỘT ĐVT trên dòng dữ liệu (dòng "2 ... Keo nước P2407 pax Lọ
+      // 15 20.000 300.000"), làm ĐVT bị mặc định sai thành "Chiếc" VÀ chữ "Lọ" bị dính nhầm vào
+      // cuối TÊN HÀNG (tên sai "Keo nước P2407 pax Lọ" thay vì tên đúng "Keo nước P2407 pax" với
+      // ĐVT "Lọ"). "Lọ" (dấu HỎI) khác "lô" (dấu ngã sai lỗi gõ, không phải trường hợp này) và
+      // khác "lon"/"lô" đã có sẵn trong danh sách - không trùng, an toàn khi thêm.
+      const UNIT_TOKEN_RE_PDF = /^(chiếc|cái|cai|con|bộ|bình|lít|hộp|kg|mét|lô|cuộn|tấm|tám|lon|chai|can|xô|phuy|cụm|cục|thùng|gói|bao|kiện|đôi|túi|bó|vỉ|vĩ|ống|tá|cây|sợi|cặp|tuýp|tuyp|hũ|hủ|thanh|viên|chùm|ly|xấp|bánh|lá|lọ)$/i;
       // [v36] "tám" (dấu sắc, không mũ - nghĩa gốc là số "8") được chấp nhận ở VỊ TRÍ ĐVT vì
       // trên thực tế NCC hay gõ NHẦM dấu "Tấm" (ấ) thành "Tám" (á) khi lập hóa đơn (ví dụ dòng
       // "...CAO SU TÁM 20,00..." thay vì "...CAO SU TẤM 20,00..."). Nhầm lẫn CHỈ xảy ra ở đúng
@@ -1752,6 +1768,33 @@
         return parenCount >= 3;
       }
 
+      // [v48] Bugfix biến thể MỚI của dòng đánh số cột, dùng CHỮ CÁI ĐƠN cho các cột đầu (ký
+      // hiệu tham chiếu A/B/C, KHÔNG phải tên hàng) rồi mới đến số cột + công thức, ví dụ
+      // "A B C 1 2 3 = 1 x 2" (NCC Kiến Thành, mẫu Viettel vinvoice: cột A="STT", B="Tên hàng
+      // hóa, dịch vụ", C="Đơn vị tính", rồi 1="Số lượng", 2="Đơn giá", 3="Thành tiền"). Dòng
+      // này không khớp isColumnNumberingLinePDF (đòi hỏi ONLY dấu ngoặc/số/=/x, không cho phép
+      // chữ cái A/B/C) lẫn /^1\s+2\s+3\s+4\s+5/i (dòng không bắt đầu bằng số) hay /6=4x5/i, nên
+      // lọt qua mọi bộ lọc hiện có, bị hiểu nhầm thành 1 mảnh "tên hàng mồ côi" đứng NGAY TRƯỚC
+      // mặt hàng STT=1 thật - kéo theo TOÀN BỘ chuỗi lỗi domino đã biết (xem chú thích v46/
+      // isColumnNumberingLinePDF phía trên): expectedSuffixCount bị thừa 1, khiến mặt hàng
+      // STT=1 nuốt luôn tên+ĐVT của STT=2 vào phần đuôi, rồi STT=2 without data lại nuốt tiếp
+      // STT=3... RỚT MẤT gần như toàn bộ danh sách hàng hóa (hóa đơn Kiến Thành #1354: từ 3
+      // mặt hàng thật chỉ còn sống sót 1 "mặt hàng" duy nhất, tên bị gộp lẫn lộn cả 3 dòng).
+      // Nhận diện: MỌI token trên dòng (tách theo khoảng trắng) đều là 1 CHỮ CÁI ĐƠN (ký hiệu
+      // cột) HOẶC 1 cụm chỉ gồm số/=/x (công thức) - tên hàng/mã hàng thật KHÔNG BAO GIỜ là
+      // chuỗi các chữ cái đơn lẻ tách rời như vậy, nên an toàn để loại bỏ mà không sợ nhận nhầm.
+      function isColumnLetterNumberingLinePDF(line) {
+        let tokens = String(line || '').trim().split(/\s+/).filter(Boolean);
+        if (tokens.length < 3) return false;
+        let hasLetter = false, hasFormula = false;
+        for (let t of tokens) {
+          if (/^[A-Za-z]$/.test(t)) { hasLetter = true; continue; }
+          if (/^[\d=x×]+$/i.test(t)) { if (/[=x×]/i.test(t)) hasFormula = true; continue; }
+          return false;
+        }
+        return hasLetter && hasFormula;
+      }
+
       // [v27] Cắt bỏ số trang kiểu " 1/3" / " Trang 2/3" dính vào CUỐI tên hàng (do PDF nối
       // liền dòng chân trang vào dòng cuối bảng). CHỈ coi là số trang thật khi mẫu số (tổng
       // số trang) là 1 con số nhỏ hợp lý (1-30) VÀ tử số (trang hiện tại) <= mẫu số - để
@@ -1806,19 +1849,37 @@
         // việc dò số liệu từ phải sang trái thất bại hoàn toàn (parseNum("X") = null), làm
         // khối hàng này bị coi là "chưa đủ số liệu" và tiếp tục nuốt nhầm các dòng mồ côi
         // của mặt hàng KẾ TIẾP làm phần đuôi tên hàng, phá vỡ toàn bộ các khối hàng sau đó.
+        // [v49] Một số mẫu hóa đơn (VD NCC Vạn Phước) in thêm 1 cột "Tiền thuế GTGT" = "0" rõ
+        // ràng NGAY SAU token "X" ở dòng hàng khuyến mại/tặng kèm 0đ (trong khi cột "Thuế suất
+        // GTGT" liền trước lại để TRỐNG HOÀN TOÀN, không có token nào), ví dụ dòng thô "...Bộ
+        // 1,00 X 0" - khác với mẫu TORA ASIA đã xử lý ở trên chỉ có (các) token "X" đơn thuần
+        // ở cuối ("...Bộ 1,00 X X"). Token "0" đứng SAU "X" khiến vòng lặp đếm trailingX bên
+        // dưới (chỉ khớp "X" liên tiếp tính từ cuối dòng) dừng lại NGAY LẬP TỨC tại "0" (không
+        // khớp /^X$/i) - trailingX=0, nhánh xử lý riêng cho hàng khuyến mại không được kích
+        // hoạt. Hậu quả: amt=parseNum("0")=0 (hợp lệ, KHÔNG null) khiến code đi tiếp xuống
+        // nhánh thường bên dưới tưởng đã đủ số liệu, rồi unitPrice=parseNum("X")=null thất bại
+        // - toàn bộ dòng hàng bị coi là "chưa đủ số liệu", kích hoạt lại đúng chuỗi lỗi domino
+        // đã biết (nuốt mất hàng loạt mặt hàng phía sau, xem chú thích v46/v48) - hóa đơn Vạn
+        // Phước #00000018: từ 9 mặt hàng chỉ còn sống sót 2 mặt hàng đầu/cuối. Xử lý: bóc tách
+        // riêng 1 token "0" cuối cùng (nếu token liền trước nó là "X") trước khi đếm trailingX,
+        // để chuỗi X phía trước vẫn được nhận diện đúng như mẫu TORA ASIA.
+        let workTokens = tokens;
+        if (tokens.length >= 2 && tokens[tokens.length - 1] === '0' && /^X$/i.test(tokens[tokens.length - 2])) {
+          workTokens = tokens.slice(0, tokens.length - 1);
+        }
         let trailingX = 0;
-        for (let k = tokens.length - 1; k >= 0; k--) {
-          if (/^X$/i.test(tokens[k])) trailingX++;
+        for (let k = workTokens.length - 1; k >= 0; k--) {
+          if (/^X$/i.test(workTokens[k])) trailingX++;
           else break;
         }
         if (trailingX > 0) {
-          let idxX = tokens.length - 1 - trailingX;
-          let qtyParsed = parseNum(tokens[idxX]);
+          let idxX = workTokens.length - 1 - trailingX;
+          let qtyParsed = parseNum(workTokens[idxX]);
           if (qtyParsed !== null && qtyParsed > 0 && qtyParsed < 1000000) {
-            let unitCand = tokens[idxX - 1] || '';
+            let unitCand = workTokens[idxX - 1] || '';
             let hasUnit = UNIT_TOKEN_RE_PDF.test(unitCand);
             let nameEndIdx = hasUnit ? idxX - 2 : idxX - 1;
-            let namePart = tokens.slice(0, nameEndIdx + 1).join(' ').trim();
+            let namePart = workTokens.slice(0, nameEndIdx + 1).join(' ').trim();
             if (namePart || allowEmptyName) {
               return { namePart, unit: hasUnit ? fixTamTypoPDF(unitCand) : 'Chiếc', qty: qtyParsed, unitPrice: 0, amt: 0, vatRate: '' };
             }
@@ -2422,7 +2483,7 @@
         if (STOP_RE_PDF.test(lineClean)) { finalizeBlock(); continue; }
         if (HEADER_FRAG_RE_PDF.test(lineClean)) { finalizeBlock(); continue; }
         if (isHeaderVocabOnlyLine(lineClean)) { finalizeBlock(); continue; }
-        if (/6=4x5/i.test(lineClean) || /^1\s+2\s+3\s+4\s+5/i.test(lineClean) || isColumnNumberingLinePDF(lineClean)) { finalizeBlock(); continue; }
+        if (/6=4x5/i.test(lineClean) || /^1\s+2\s+3\s+4\s+5/i.test(lineClean) || isColumnNumberingLinePDF(lineClean) || isColumnLetterNumberingLinePDF(lineClean)) { finalizeBlock(); continue; }
         // [v46 - Bugfix dòng ghi chú "Thay thế cho hóa đơn..." bị nuốt làm tiền tố tên hàng
         // mặt hàng #1, kéo theo nuốt LUÔN CẢ mặt hàng #2] Hóa đơn thay thế (điều chỉnh 1 hóa
         // đơn trước đó) thường in thêm 1 dòng ghi chú riêng "Thay thế cho hóa đơn Mẫu số...
