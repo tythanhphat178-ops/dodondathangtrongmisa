@@ -2716,10 +2716,34 @@
       }
     }
 
-    // Dò NCC/hãng từ toàn bộ nội dung PDF (nếu tên file chưa dò ra hãng). Tên công ty bán hàng
-    // thường nằm ở đầu trang 1, ví dụ "CÔNG TY TNHH MTV HONDA VIỆT NAM" hay "CN SUZUKI...".
+    // Dò NCC/hãng từ nội dung PDF (nếu tên file chưa dò ra hãng). Tên công ty bán hàng thường
+    // nằm ở đầu trang 1, ví dụ "CÔNG TY TNHH MTV HONDA VIỆT NAM" hay "CN SUZUKI...".
+    // [Bugfix - hóa đơn NCC bán NHIỀU HÃNG trong CÙNG 1 hóa đơn, VD Mai Thảo bán chung dầu nhờn
+    // Honda/Yamalube/ACTIV VISTRA...] Trước đây dò thẳng trên fullDocText (gồm cả TÊN của MỌI
+    // dòng hàng, không riêng phần thông tin công ty) - nếu 1 dòng hàng bất kỳ trùng tên 1 hãng
+    // trong KNOWN_BRANDS (VD dòng hàng "Honda 0.8L"), cả hóa đơn bị NHẦM gán "hãng chung" =
+    // "honda", rồi hãng này bị dùng làm invBrand DỰ PHÒNG cho MỌI dòng hàng KHÁC không tự dò ra
+    // hãng riêng (VD dòng "Dầu Yamalube 4T SL 10W40 MA 800ML") trong matchMisaItem() - khiến 1
+    // mã kho MISA thuộc hãng Honda được CỘNG ĐIỂM SAI (+5000 điểm NCC) dù hoàn toàn không liên
+    // quan, "cướp" mất kết quả khớp đúng lẽ ra thuộc về dòng Yamalube (dù giá lệch tới -40%).
+    // Đã thử cách CẮT theo VỊ TRÍ DÒNG (chỉ dò trong các dòng trước tiêu đề "HÓA ĐƠN GIÁ TRỊ
+    // GIA TĂNG"/bảng hàng hóa) nhưng KHÔNG đáng tin: với nhánh hasMultiLine (PDF đã có sẵn dấu
+    // xuống dòng), thứ tự "dòng" lấy theo THỨ TỰ VẼ TRONG CONTENT STREAM của PDF, có thể KHÁC
+    // hẳn thứ tự đọc trực quan trên trang (VD mẫu MISA meInvoice này vẽ dòng tiêu đề "HÓA ĐƠN
+    // GIÁ TRỊ GIA TĂNG" ở VỊ TRÍ ĐẦU TIÊN trong content stream dù trình bày trực quan nó nằm
+    // GIỮA phần thông tin công ty bán và mua) - cắt theo vị trí dòng bị sai điểm cắt, không
+    // loại được phần bảng hàng hóa. Khắc phục ĐÚNG hơn, không phụ thuộc thứ tự dòng: loại bỏ
+    // NGUYÊN VĂN tên (rawName) của TỪNG dòng hàng ĐÃ BÓC TÁCH ĐƯỢC ra khỏi fullDocText trước khi
+    // dò hãng chung - phần còn lại chỉ còn thông tin công ty/tiêu đề/footer, không còn lẫn tên
+    // riêng của bất kỳ mặt hàng cụ thể nào để bị hiểu nhầm thành "hãng của cả hóa đơn".
     if (!currentInvoiceSupplierBrand) {
-      currentInvoiceSupplierBrand = detectBrandKeyword(fullDocText);
+      let nonItemText = fullDocText;
+      for (let it of allParsedItems) {
+        if (it.rawName && it.rawName.length >= 3) {
+          nonItemText = nonItemText.split(it.rawName).join(' ');
+        }
+      }
+      currentInvoiceSupplierBrand = detectBrandKeyword(nonItemText);
     }
     // Dò xem tên công ty bán hàng trên hóa đơn có trùng với 1 tag "Kho ngầm định" (NCC) nào
     // đã có sẵn trong danh mục MISA hay không (VD: "MAI THAO"), để ưu tiên khớp đúng NCC đó.
