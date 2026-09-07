@@ -106,6 +106,12 @@
     .cat-match { font-size: 11.5px; color: #475569; margin-top: 3px; }
     .desc-match { font-size: 11px; color: #0284c7; margin-top: 2px; }
     .unmatched-warn { font-size: 11.5px; color: #b45309; font-weight: 600; margin-top: 2px; }
+    /* [Tính năng mới - cảnh báo khớp mập mờ] Dùng khi matchMisaItemWithInfo() phát hiện có >=2
+       mã kho MISA đạt điểm khớp gần ngang nhau (xem chú thích chi tiết tại nơi khai báo hàm) -
+       hiển thị nổi bật màu đỏ cam để người dùng biết cần tự kiểm tra lại thay vì tin tuyệt đối
+       vào lựa chọn tự động của app. */
+    .ambiguous-warn { font-size: 11.5px; color: #dc2626; font-weight: 600; margin-top: 3px; padding: 4px 6px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 4px; }
+    .ambiguous-alt { font-weight: 400; color: #7f1d1d; }
     .hint-text { font-size: 11px; color: #64748b; margin-top: 4px; }
     .btn-edit-match { padding: 2px 6px; font-size: 10.5px; margin-left: 6px; color: #475569; border: 1px dashed #cbd5e1; border-radius: 4px; background: white; cursor: pointer; }
     .btn-edit-match:hover { background: #eff6ff; color: var(--primary); border-color: var(--primary); }
@@ -3021,12 +3027,22 @@
 
   // invBrandHint: NCC/hãng dò riêng cho dòng hàng này (nếu có). Nếu bỏ trống, hàm sẽ tự
   // dùng NCC chung của cả hóa đơn (currentInvoiceSupplierBrand), rồi mới dự phòng dò trong rawName.
-  function matchMisaItem(invCode, invName, rawName, invPrice, invBrandHint) {
-    if (!masterCatalog || masterCatalog.length === 0) return null;
+  // [Tính năng mới - CẢNH BÁO KHỚP MẬP MỜ] Trước đây matchMisaItem() luôn âm thầm trả về ĐÚNG 1
+  // kết quả tốt nhất theo điểm số, kể cả khi có 2+ mã trong kho đạt điểm gần như ngang nhau (ca
+  // thực tế: 2 mã Michelin 80/90-14 khác Tên/giá nhưng bị lỗi dữ liệu trùng y hệt "Diễn giải khi
+  // mua" - xem chú thích chi tiết ở nhánh Ưu tiên 3 bên dưới) - người dùng không có cách nào biết
+  // app đang "đoán" giữa 2 lựa chọn ngang nhau để tự kiểm tra lại, chỉ phát hiện được khi tình cờ
+  // đối chiếu qua ảnh chụp phần mềm MISA thật. Đổi tên hàm gốc thành matchMisaItemWithInfo(),
+  // trả về thêm { ambiguous, alternative } bên cạnh { item } mô tả có mã nào khác gần ngang điểm
+  // hay không (và mã đó là gì) để giao diện hiển thị cảnh báo riêng cho các dòng này. Hàm
+  // matchMisaItem() cũ được giữ lại làm wrapper mỏng (chỉ lấy .item) để KHÔNG phải sửa các nơi
+  // gọi khác (dòng nhập tay/sửa mã) vốn không cần thông tin ambiguous.
+  function matchMisaItemWithInfo(invCode, invName, rawName, invPrice, invBrandHint) {
+    if (!masterCatalog || masterCatalog.length === 0) return { item: null, ambiguous: false, alternative: null };
 
     // Chặn sớm: dòng khuyến mãi/chiết khấu không phải hàng hóa thật -> không đối chiếu
-    if (isPromoNoteLine(rawName) || isPromoNoteLine(invName)) return null;
-    
+    if (isPromoNoteLine(rawName) || isPromoNoteLine(invName)) return { item: null, ambiguous: false, alternative: null };
+
     let cleanInvCode = cleanCode(invCode);
     let cleanRawCode = cleanCode(rawName);
     let normInvName = normalizeText(invName);
@@ -3048,7 +3064,7 @@
     if (cleanInvCode && cleanInvCode.length >= 4) {
       let exactCodes = masterCatalog.filter(item => cleanCode(item.code) === cleanInvCode);
 
-      if (exactCodes.length === 1) return exactCodes[0];
+      if (exactCodes.length === 1) return { item: exactCodes[0], ambiguous: false, alternative: null };
       if (exactCodes.length > 1) {
         // Nhiều mã trùng nhau (hiếm): ưu tiên đúng NCC trước, rồi mới tới giá gần nhất
         exactCodes.sort((a, b) => {
@@ -3059,7 +3075,15 @@
           }
           return Math.abs((Number(a.buyPrice) || 0) - targetPrice) - Math.abs((Number(b.buyPrice) || 0) - targetPrice);
         });
-        return exactCodes[0];
+        // [Cảnh báo mập mờ] Nhiều mã kho MISA bị trùng y hệt Mã hàng (hiếm nhưng vẫn là lỗi dữ
+        // liệu có thật) - nếu 2 mã trùng đó lại có giá mua khác nhau đáng kể (>5%), rất có thể
+        // là 2 dòng khác nhau bị gõ nhầm trùng Mã, nên báo cho người dùng tự kiểm tra dù app đã
+        // chọn 1 kết quả theo NCC/giá gần nhất.
+        let a0 = exactCodes[0], a1 = exactCodes[1];
+        let p0 = Number(a0.buyPrice) || 0, p1 = Number(a1.buyPrice) || 0;
+        let maxP01 = Math.max(p0, p1);
+        let amb = maxP01 > 0 && (Math.abs(p0 - p1) / maxP01) > 0.05;
+        return { item: a0, ambiguous: amb, alternative: amb ? a1 : null };
       }
     }
 
@@ -3078,7 +3102,7 @@
           }
           return Math.abs((Number(a.buyPrice) || 0) - targetPrice) - Math.abs((Number(b.buyPrice) || 0) - targetPrice);
         });
-        return descMatches[0];
+        return { item: descMatches[0], ambiguous: false, alternative: null };
       }
     }
 
@@ -3231,11 +3255,42 @@
       // được coi là 1 kết quả đáng tin - tránh việc chỉ vì giá trùng ngẫu nhiên (VD 2 dòng
       // cùng ghi giá 0đ) mà "kéo" 1 khớp tên rất yếu vượt qua để bị nhận nhầm là kết quả đúng.
       const MIN_NAME_SCORE_TO_ACCEPT = 170;
-      if (best.nameScore < MIN_NAME_SCORE_TO_ACCEPT) return null;
-      return best.item;
+      if (best.nameScore < MIN_NAME_SCORE_TO_ACCEPT) return { item: null, ambiguous: false, alternative: null };
+
+      // [Cảnh báo mập mờ - phần chính] So ứng viên #1 (best) với ứng viên #2 (runner-up, nếu
+      // có). Coi là "mập mờ" khi CẢ 2 điều kiện sau đều đúng:
+      // (1) best.nameScore >= 600: chỉ cảnh báo khi ứng viên tốt nhất đã khớp tên/diễn giải khá
+      //     mạnh (khớp tuyệt đối hoặc khớp chuỗi con >=4 ký tự) - không cảnh báo tràn lan cho
+      //     các khớp mờ nhạt qua từ khóa (nameScore<600, vốn đã kém tin cậy sẵn ở mọi trường
+      //     hợp, cảnh báo thêm không giúp ích, chỉ gây nhiễu).
+      // (2) Chênh lệch totalScore giữa #1 và #2 <= 150 (đúng bằng khoảng cách lớn nhất có thể
+      //     giữa 2 bậc priceScore liền kề: 500-350=150) VÀ 2 ứng viên là 2 MÃ KHÁC NHAU: nghĩa
+      //     là mọi tín hiệu khác (tên, hãng, kho) đã gần như hòa nhau, chỉ còn khác biệt ở mức
+      //     tối đa "đúng 1 bậc giá" - đây chính xác là tình huống đã gây lỗi thực tế ở mã
+      //     Michelin 80/90-14 "Pilot Street 2" bị mã "Pilot Moto GP" (Diễn giải trùng do lỗi
+      //     nhập liệu MISA) suýt cướp mất kết quả đúng. Ngưỡng 150 giúp bắt đúng lớp lỗi này mà
+      //     không cảnh báo những ca ứng viên #2 đã rõ ràng kém hơn hẳn (VD chênh hàng trăm/nghìn
+      //     điểm do khác hãng/khác tên hẳn).
+      const AMBIGUOUS_MIN_NAME_SCORE = 600;
+      const AMBIGUOUS_MAX_SCORE_GAP = 150;
+      let ambiguous = false, alternative = null;
+      if (candidates.length > 1 && best.nameScore >= AMBIGUOUS_MIN_NAME_SCORE) {
+        let runner = candidates[1];
+        if (runner.item.code !== best.item.code && (best.totalScore - runner.totalScore) <= AMBIGUOUS_MAX_SCORE_GAP) {
+          ambiguous = true;
+          alternative = runner.item;
+        }
+      }
+      return { item: best.item, ambiguous, alternative };
     }
 
-    return null;
+    return { item: null, ambiguous: false, alternative: null };
+  }
+
+  // Wrapper mỏng giữ nguyên chữ ký/hành vi hàm gốc (chỉ trả về mã khớp được hoặc null) cho các
+  // nơi gọi không cần thông tin cảnh báo mập mờ (VD luồng nhập tay/sửa mã thủ công).
+  function matchMisaItem(invCode, invName, rawName, invPrice, invBrandHint) {
+    return matchMisaItemWithInfo(invCode, invName, rawName, invPrice, invBrandHint).item;
   }
 
   function recalcSummaryStats() {
@@ -3257,7 +3312,11 @@
     currentComparison = [];
 
     for (let inv of invoiceItems) {
-      const matched = matchMisaItem(inv.invCode, inv.invName, inv.rawName, inv.price, inv.invBrand);
+      // Dùng bản matchMisaItemWithInfo() để lấy thêm cờ "ambiguous" (có mã khác gần ngang điểm
+      // hay không) - xem chú thích đầy đủ tại nơi khai báo hàm - phục vụ hiển thị cảnh báo riêng
+      // ở renderComparisonTable() cho các dòng có nguy cơ khớp mập mờ.
+      const info = matchMisaItemWithInfo(inv.invCode, inv.invName, inv.rawName, inv.price, inv.invBrand);
+      const matched = info.item;
       let diff = 0, pct = 0, status = 'unknown';
 
       if (matched) {
@@ -3268,7 +3327,7 @@
         else status = 'down';
       }
 
-      currentComparison.push({ inv, matched, diff, pct, status });
+      currentComparison.push({ inv, matched, diff, pct, status, ambiguous: info.ambiguous, alternative: info.alternative });
     }
 
     document.getElementById('summaryBar').style.display = 'block';
@@ -3321,6 +3380,14 @@
       let matchInfo;
       if (m) {
         matchInfo = `🔗 <b>Kho MISA:</b> ${escapeHtml(m.name)} ${m.desc ? `<div class="desc-match">📝 <i>Diễn giải:</i> ${escapeHtml(m.desc)}</div>` : ''}`;
+        // [Tính năng mới - cảnh báo khớp mập mờ] Hiển thị khi matchMisaItemWithInfo() phát hiện
+        // có mã kho MISA khác gần ngang điểm với mã được chọn (xem chú thích chi tiết tại nơi
+        // khai báo hàm). Hiện luôn Mã + Tên + Giá của mã còn lại để người dùng đối chiếu ngay
+        // trên bảng, không cần mở lại phần mềm MISA để tự tra cứu như trước.
+        if (row.ambiguous && row.alternative) {
+          const alt = row.alternative;
+          matchInfo += `<div class="ambiguous-warn">⚠️ Có mã khác khớp gần ngang điểm, cần kiểm tra thủ công: <span class="ambiguous-alt"><b>${escapeHtml(alt.code)}</b> - ${escapeHtml(alt.name)} (${fmt(alt.buyPrice)})</span></div>`;
+        }
       } else if (row.notFoundExact) {
         matchInfo = `<div class="unmatched-warn" style="color:#dc2626;">❌ <b>Không tìm thấy mã "${escapeHtml(inv.rawName)}" trong kho MISA.</b> Vui lòng kiểm tra lại mã hàng đã gõ.</div>`;
       } else {
