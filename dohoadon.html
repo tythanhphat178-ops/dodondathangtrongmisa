@@ -413,22 +413,90 @@
 
   // --- NHẬN DIỆN NHÀ CUNG CẤP / HÃNG (NCC) ĐỂ TRÁNH KHỚP NHẦM TÊN GIỮA CÁC HÃNG ---
   // Danh sách hãng xe / hãng phụ tùng phổ biến. Có thể bổ sung thêm khi gặp NCC mới.
+  // [Bugfix - thiếu hẳn nhóm hãng VỎ/RUỘT/SĂM LỐP xe máy] Danh sách gốc chỉ có hãng xe +
+  // linh kiện điện/dầu nhớt, KHÔNG có bất kỳ hãng lốp nào (Michelin, Maxxis, Chengshin,
+  // Kenda...) dù đây là nhóm hàng cực phổ biến ở NCC phụ tùng xe máy (VD hóa đơn NCC Khang
+  // Mỹ Phát toàn "Vỏ Michelin...", hóa đơn NCC Mai Thảo có "Vỏ/Lốp Maxxis...",
+  // "Chengshin...", "KENDA..."). Do thiếu hãng, detectBrandKeyword() trả về '' cho MỌI dòng
+  // vỏ/lốp trong 2 hóa đơn này, khiến invBrand rỗng và cơ chế chấm điểm brandScore trong
+  // matchMisaItem() (vốn nặng nhất, ±5000/-3000 điểm - áp đảo hẳn nameScore+priceScore) bị
+  // TẮT HOÀN TOÀN cho cả nhóm hàng vỏ/lốp: nếu kho MISA có nhiều hãng lốp cùng cỡ (rất
+  // thường gặp, VD "Vỏ 70/90-17" của cả Michelin lẫn Chengshin), app không còn cách nào phân
+  // biệt đúng hãng, dễ khớp nhầm sang hãng khác dù tên/cỡ na ná nhau - đúng lỗi mà cơ chế
+  // brandScore này sinh ra để ngăn (xem chú thích "Bugi NGK bị gán sang mặt hàng của hãng
+  // SYM" ở matchMisaItem). Bổ sung 4 hãng lốp đã xác nhận thực tế trên 2 hóa đơn trên.
   const KNOWN_BRANDS = [
     'honda', 'yamaha', 'suzuki', 'sym', 'piaggio', 'vespa', 'kymco', 'kawasaki',
     'ktm', 'ducati', 'daelim', 'peugeot', 'brixton', 'vinfast',
     'ngk', 'denso', 'bosch', 'nok', 'koyo', 'nsk', 'ntn', 'fcc', 'exedy',
-    'did', 'rk', 'kmc', 'yuasa', 'gs', 'castrol', 'motul', 'caltex', 'havoline'
+    'did', 'rk', 'kmc', 'yuasa', 'gs', 'castrol', 'motul', 'caltex', 'havoline',
+    'michelin', 'maxxis', 'chengshin', 'kenda'
   ];
 
+  // [Bugfix - hãng Chengshin bị 1 số mã trong kho MISA thật ghi sai chính tả thành "Chensing"
+  // (VD "Vỏ 120/70-12 Chensing CS-W1 58L TL"), không khớp regex "chengshin" nên trước đây bị
+  // detectBrandKeyword() coi là KHÔNG XÁC ĐỊNH được hãng cho các mã này. Alias để nhận diện
+  // "Chensing" cũng là hãng "chengshin" (không tạo hãng mới, chỉ gộp biến thể chính tả) - xem
+  // thêm chú thích trong detectBrandKeyword() bên dưới về lý do việc này quan trọng.
+  const BRAND_ALIASES = { 'chensing': 'chengshin' };
+
   // Bỏ dấu tiếng Việt để so khớp hãng không phụ thuộc dấu câu (dùng lại hàm removeVietnameseTones bên dưới)
+  // [Bugfix NGHIÊM TRỌNG - hãng xác định theo THỨ TỰ KHAI BÁO trong mảng KNOWN_BRANDS thay vì
+  // theo VỊ TRÍ XUẤT HIỆN THẬT trong văn bản]. Hàm cũ duyệt KNOWN_BRANDS theo đúng thứ tự khai
+  // báo và trả về hãng ĐẦU TIÊN tìm thấy BẤT KỲ ĐÂU trong text, không quan tâm hãng đó xuất
+  // hiện ở đầu câu (= tên hãng thật của sản phẩm) hay cuối câu/trong ngoặc (= chỉ là ghi chú
+  // phụ, VD tên các dòng xe tương thích). Ca thực tế phát hiện qua đối chiếu với danh mục MISA
+  // thật của khách hàng: mã A.8696 "Vỏ 120/70-12 Chensing CS-W1 58L TL ( sau Piaggio Vespa
+  // Sprint ) ( trước Piaggio Vespa GTS )" - đây là 1 VỎ LỐP HÃNG CHENGSHIN (chỉ tương thích lắp
+  // cho xe Piaggio/Vespa), nhưng vì "piaggio" đứng trước "chengshin" trong mảng KNOWN_BRANDS,
+  // hàm cũ trả về hãng "piaggio" - SAI hoàn toàn hãng thật của SẢN PHẨM. Hậu quả: hóa đơn NCC
+  // Mai Thảo dòng "Lốp Chengshin 120/70-12 WGV 58L TL" (giá 455.555,5đ, khớp giá TUYỆT ĐỐI với
+  // A.8696) bị brandScore phạt oan -3000đ (do "chengshin" ≠ "piaggio"), đẩy xuống cuối bảng ứng
+  // viên, khiến app khớp nhầm sang 1 phụ tùng Honda "Ốp bụng thùng xăng..." (giá 75.410đ) hoàn
+  // toàn không liên quan chỉ vì tên "Ốp" 2 ký tự tình cờ là chuỗi con của "Lốp". Sửa: duyệt
+  // TOÀN BỘ các hãng (kể cả alias), tìm hãng có VỊ TRÍ XUẤT HIỆN SỚM NHẤT trong text rồi mới
+  // trả về - đúng với thực tế tên hãng sản phẩm luôn được ghi lên đầu, còn ghi chú xe tương
+  // thích luôn nằm sau/trong ngoặc.
   function detectBrandKeyword(text) {
     if (!text) return '';
     const plain = ' ' + removeVietnameseTones(String(text)) + ' ';
-    for (let b of KNOWN_BRANDS) {
+    const allTokens = KNOWN_BRANDS.concat(Object.keys(BRAND_ALIASES));
+    let bestIdx = -1, bestBrand = '';
+    for (let b of allTokens) {
       const re = new RegExp('(^|[^a-z0-9])' + b + '([^a-z0-9]|$)', 'i');
-      if (re.test(plain)) return b;
+      const m = re.exec(plain);
+      if (m && (bestIdx === -1 || m.index < bestIdx)) {
+        bestIdx = m.index;
+        bestBrand = BRAND_ALIASES[b] || b;
+      }
     }
-    return '';
+    return bestBrand;
+  }
+
+  // [Bugfix - khớp nhầm 2 CỠ VỎ/RUỘT/LỐP KHÁC NHAU của CÙNG 1 hãng, VD hóa đơn NCC Khang Mỹ
+  // Phát: "Vỏ Michelin 140/70-17 M/C 66S PILOT STREET 2R TL" (SL 5, giá 1.283.074,07) bị app
+  // khớp NHẦM sang mã kho MISA có sẵn "Vỏ 70/90-17 Michelin Pilot STreet 2 TL" (giá mua gần
+  // nhất 509.055đ, thực chất là mã được tạo TRƯỚC ĐÓ từ 1 dòng hàng KHÁC cùng hóa đơn - "Vỏ
+  // Michelin 70/90-17 M/C 43S PILOT STREET 2 TL") - dù 70/90-17 và 140/70-17 là 2 CỠ VỎ HOÀN
+  // TOÀN KHÁC NHAU (khác cả bề rộng lẫn biên dạng), khiến báo sai lệch giá ảo "+774.019đ
+  // (+152.1%)". Nguyên nhân: ở "Ưu tiên 3" (khớp gần đúng theo từ khóa), 2 tên hàng này vẫn
+  // trùng khá nhiều TỪ CHUNG chung (vỏ, michelin, pilot, street, tl, và ngay cả riêng số "70"/
+  // "17" cũng vô tình xuất hiện ở CẢ 2 dù thuộc 2 vị trí khác nhau trong cỡ lốp) nên vượt
+  // ngưỡng matchRatio>=34%, còn brandScore (+5000, cùng hãng Michelin) lại càng đẩy điểm lên
+  // cao - trong khi catalog CHỈ có đúng 1 mã Michelin nên nghiễm nhiên "thắng" dù sai cỡ. Với
+  // vỏ/ruột/lốp xe, CỠ (ghi theo chuẩn "rộng/biên dạng-vành" như "70/90-17", "140/70-17", hoặc
+  // dạng số thập phân "2.50-17") mới là yếu tố ĐỊNH DANH sản phẩm quan trọng nhất (khác cỡ =
+  // chắc chắn khác mã hàng/SKU, bất kể trùng hãng/tên mô tả đến đâu) - nhưng thuật toán chấm
+  // điểm hiện tại coi các con số trong cỡ lốp y hệt các từ khóa thường khác, không có cơ chế
+  // nào đòi hỏi cỡ phải khớp. Trích riêng "mã cỡ" bằng regex (dạng số-số-số ngăn bởi "/" hoặc
+  // "." rồi "-"); nếu CẢ tên hóa đơn lẫn tên/diễn giải kho MISA đều trích được mã cỡ nhưng 2 mã
+  // cỡ đó KHÁC NHAU, loại thẳng ứng viên này khỏi danh sách xét khớp (không cho vào candidates)
+  // - an toàn tuyệt đối vì chỉ áp dụng khi CẢ HAI bên đều CÓ mã cỡ rõ ràng để so sánh, không
+  // ảnh hưởng các mặt hàng không phải vỏ/ruột/lốp (vốn không khớp được định dạng này).
+  function extractTireSizeToken(text) {
+    if (!text) return null;
+    let m = String(text).match(/(\d{1,3})[.\/](\d{1,3})-(\d{1,3})/);
+    return m ? (m[1] + '-' + m[2] + '-' + m[3]) : null;
   }
 
   // --- 1. INDEXED DB TỰ ĐỘNG KHÔI PHỤC DỮ LIỆU TỪ MỌI PHIÊN BẢN CŨ ---
@@ -598,6 +666,36 @@
     reader.readAsArrayBuffer(file);
   }
 
+  // [Bugfix NGHIÊM TRỌNG - gốc rễ hàng loạt lỗi khớp nhầm mã kho MISA, VD hóa đơn NCC Mai
+  // Thảo: "VỎ 80/90-16 43P K6010 TL" có sẵn mã kho ĐÚNG TUYỆT ĐỐI (A.9521, Diễn giải khớp
+  // 100% + giá mua gần nhất khớp tới từng đồng 263.981,45) nhưng app vẫn khớp NHẦM sang mã
+  // A.7978 (hãng khác, giá lệch -31.3%); tương tự với A.1336 vs A.186 (cỡ 90/90-14)... Nguyên
+  // nhân: cột "Đơn giá mua gần nhất"/"Số lượng tồn" trong file Excel/CSV danh mục MISA thường
+  // được xuất ra dưới dạng CHUỖI VĂN BẢN theo định dạng số Việt Nam (dấu chấm ngăn nhóm nghìn,
+  // dấu phẩy ngăn thập phân, VD "263.981,45") thay vì 1 Ô SỐ THẬT - đặc biệt LUÔN xảy ra khi
+  // nạp từ file .csv (SheetJS đọc CSV thì MỌI giá trị đều là string, không có khái niệm "ô
+  // số"). `Number("263.981,45")` cho kết quả NaN (dấu phẩy không hợp lệ trong cú pháp số của
+  // JS) - `NaN || 0` "nuốt câm" lỗi này thành 0, khiến buyPrice của rất nhiều mặt hàng trong
+  // kho bị mất trắng về 0 mà KHÔNG có bất kỳ cảnh báo nào. Hậu quả dây chuyền cực nặng trong
+  // matchMisaItem(): priceScore của các mặt hàng bị mất giá này luôn = 0 (vì điều kiện
+  // "itemPrice > 0" không thỏa), làm mất hẳn lợi thế đáng lẽ phải có của mặt hàng khớp tên +
+  // giá tuyệt đối, khiến 1 mặt hàng KHÁC (dù tên/giá kém khớp hơn nhưng còn giữ được giá parse
+  // đúng, hoặc đơn giản do thứ tự trong mảng) bị chọn nhầm thay thế. Toàn bộ phần còn lại của
+  // code (bóc số liệu hóa đơn PDF/XML) đã luôn xử lý đúng định dạng số Việt Nam này (xem
+  // parseXmlInvoice, parsePdfInvoice...) - chỉ riêng hàm đọc danh mục MISA này là sót, dùng
+  // thẳng Number() không qua bước chuẩn hóa. parseVNNumber() bên dưới áp dụng lại đúng quy tắc
+  // đã dùng nhất quán ở những nơi khác trong file (bỏ dấu chấm nhóm nghìn, đổi dấu phẩy thập
+  // phân thành dấu chấm) trước khi parse, đồng thời vẫn nhận đúng khi ô Excel là SỐ THẬT sẵn
+  // (trường hợp phổ biến nhất, không có dấu chấm/phẩy Việt Nam nào cần xử lý).
+  function parseVNNumber(v) {
+    if (v === null || v === undefined || v === '') return 0;
+    if (typeof v === 'number') return isNaN(v) ? 0 : v;
+    let s = String(v).trim();
+    if (!s) return 0;
+    let n = parseFloat(s.replace(/\./g, '').replace(',', '.'));
+    return isNaN(n) ? 0 : n;
+  }
+
   // Trích danh sách items từ 1 workbook SheetJS đã đọc (dùng chung cho mọi nguồn dữ liệu).
   function extractMasterItemsFromWorkbook(wb) {
     const ws = wb.Sheets[wb.SheetNames[0]];
@@ -627,11 +725,20 @@
       name: String(r[nameIdx] || '').trim(),
       desc: descIdx !== -1 ? String(r[descIdx] || '').trim() : '',
       unit: unitIdx !== -1 ? String(r[unitIdx] || '').trim() : '',
-      stock: Number(r[stockIdx]) || 0,
-      buyPrice: Number(r[buyIdx]) || 0,
+      stock: parseVNNumber(r[stockIdx]),
+      buyPrice: parseVNNumber(r[buyIdx]),
       warehouse: warehouseIdx !== -1 ? String(r[warehouseIdx] || '').trim() : '',
       vat: vatIdx !== -1 ? normalizeVatValue(r[vatIdx]) : ''
-    }));
+    }))
+    // BUGFIX: loại bỏ các dòng "rác" không phải mặt hàng thật - điển hình là dòng
+    // TỔNG CỘNG ở cuối bảng Excel (VD cột "Mã" ghi chữ "Tổng", các cột Tên/Diễn giải đều
+    // trống, chỉ có 1 số tổng tiền lớn ở cột nào đó). Dòng này lọt qua bộ lọc phía trên vì
+    // cột "Mã" có chữ (không rỗng), nhưng name VÀ desc sau khi map đều là chuỗi rỗng.
+    // Nếu để lọt vào danh mục, dòng rác có name/desc rỗng sẽ vô tình "khớp" bất kỳ hóa đơn
+    // nào nhờ lỗi chuỗi_bất_kỳ.includes('') luôn = true trong matchMisaItem (đã chặn thêm
+    // ở đó bằng guard length > 0, nhưng lọc luôn từ gốc ở đây để danh mục sạch và an toàn
+    // theo cả 2 lớp phòng thủ).
+    .filter(it => it.name || it.desc);
   }
 
   // Hàm dùng chung: nhận dữ liệu nhị phân (Uint8Array/ArrayBuffer) của file Excel MISA
@@ -2736,11 +2843,37 @@
     // NGUYÊN VĂN tên (rawName) của TỪNG dòng hàng ĐÃ BÓC TÁCH ĐƯỢC ra khỏi fullDocText trước khi
     // dò hãng chung - phần còn lại chỉ còn thông tin công ty/tiêu đề/footer, không còn lẫn tên
     // riêng của bất kỳ mặt hàng cụ thể nào để bị hiểu nhầm thành "hãng của cả hóa đơn".
+    // [Bugfix TIẾP THEO của bugfix "Mai Thảo" ở trên - vẫn LỌT lưới trong 1 trường hợp cụ
+    // thể] Cách loại "NGUYÊN VĂN rawName" phía trên chỉ loại được đúng dòng hàng khi rawName
+    // xuất hiện LIỀN MẠCH (contiguous) trong fullDocText - nhưng với mặt hàng có TÊN NGẮT 2
+    // DÒNG VẬT LÝ mà dòng SỐ LIỆU (STT/ĐVT/SL/Đơn giá...) lại nằm CHEN VÀO GIỮA 2 dòng tên
+    // (rất phổ biến ở mẫu MISA meInvoice, VD hóa đơn Mai Thảo dòng 17: dòng vật lý 1 "Lốp
+    // Maxxis 80/90-17 M6230", rồi đến dòng SỐ LIỆU "17  Cái  25,00  298.796,30  7.469.908",
+    // rồi MỚI tới dòng vật lý 2 "Vàng Sirius") thì rawName ĐÃ BÓC ĐÚNG ("Lốp Maxxis 80/90-17
+    // M6230 Vàng Sirius", bỏ qua dòng số liệu chen giữa) lại KHÔNG BAO GIỜ xuất hiện liền mạch
+    // y hệt như vậy trong fullDocText (nơi dòng số liệu vẫn còn nằm CHEN Ở GIỮA theo đúng thứ
+    // tự đọc gốc) - khiến .split(rawName) KHÔNG tìm thấy gì để loại, "Lốp Maxxis 80/90-17
+    // M6230" (mảnh tên VẬT LÝ ĐẦU, vẫn chứa chữ "Maxxis") bị BỎ SÓT lại nguyên trong
+    // nonItemText. Hậu quả: dù hóa đơn Mai Thảo bán NHIỀU hãng lốp khác nhau (Kenda, Chengshin,
+    // Maxxis...), currentInvoiceSupplierBrand vẫn bị dò nhầm thành "maxxis" (do sót đúng 1 mảnh
+    // rawName như trên), rồi hãng SAI này bị dùng làm invBrand DỰ PHÒNG cho MỌI dòng hàng KHÔNG
+    // tự ghi hãng riêng trong tên (VD "Ruột 2.50-17 NTR-4", "VỎ 80/90-16 43P K6010 TL") - khiến
+    // brandScore trong matchMisaItem() CỘNG SAI +5000 cho các mã kho hãng Maxxis không liên
+    // quan và TRỪ SAI -3000 cho chính mã kho hãng Kenda/Chengshin ĐÚNG (dù tên+giá khớp gần như
+    // tuyệt đối), "cướp" mất kết quả đúng - lỗi hệt như ảnh minh họa gốc mà bugfix "Mai Thảo" ở
+    // trên đã cố ngăn, chỉ khác đường lọt lưới. Khắc phục thêm 1 lớp phòng vệ: sau khi thử loại
+    // NGUYÊN VĂN rawName (vẫn giữ nguyên, xử lý đúng đa số trường hợp tên gọn 1 dòng), loại
+    // thêm TỪNG TỪ ĐỦ DÀI (>=5 ký tự, tránh lỡ loại nhầm các từ ngắn thông dụng vô hại như
+    // "TL"/"4P"/"Cái") của rawName ra khỏi nonItemText - đảm bảo dù rawName bị chia mảnh không
+    // liền mạch trong fullDocText thế nào, mọi mảnh chứa từ khóa hãng vẫn chắc chắn bị loại.
     if (!currentInvoiceSupplierBrand) {
       let nonItemText = fullDocText;
       for (let it of allParsedItems) {
         if (it.rawName && it.rawName.length >= 3) {
           nonItemText = nonItemText.split(it.rawName).join(' ');
+          for (let word of it.rawName.split(/\s+/)) {
+            if (word.length >= 5) nonItemText = nonItemText.split(word).join(' ');
+          }
         }
       }
       currentInvoiceSupplierBrand = detectBrandKeyword(nonItemText);
@@ -2903,6 +3036,11 @@
     // NCC/hãng của dòng hàng đang xét: ưu tiên gợi ý riêng dòng -> NCC chung hóa đơn -> dò lại từ tên hàng
     let invBrand = invBrandHint || currentInvoiceSupplierBrand || detectBrandKeyword(rawName) || detectBrandKeyword(invName);
 
+    // Cỡ vỏ/ruột/lốp của dòng hàng đang xét (nếu có) - xem chú thích bugfix tại
+    // extractTireSizeToken() phía trên. Dò cả invName lẫn rawName (2 dòng thường giống hệt
+    // nhau với hàng vỏ/lốp vì không tách được Mã hàng riêng).
+    let invSizeToken = extractTireSizeToken(invName) || extractTireSizeToken(rawName);
+
     // Hàm phụ: xác định hãng của 1 mặt hàng trong kho MISA (dò trong Tên hàng + Diễn giải + Mã)
     const itemBrandOf = (item) => detectBrandKeyword((item.name || '') + ' ' + (item.desc || '') + ' ' + (item.code || ''));
 
@@ -2953,6 +3091,15 @@
     let candidates = [];
 
     for (let item of masterCatalog) {
+      // Loại thẳng ứng viên nếu CẢ 2 bên đều xác định được cỡ vỏ/ruột/lốp nhưng KHÁC cỡ nhau
+      // - xem chú thích bugfix chi tiết tại extractTireSizeToken() phía trên. Đặt điều kiện
+      // này TRƯỚC MỌI nhánh chấm điểm tên (kể cả các nhánh "khớp tuyệt đối") để không có
+      // đường vòng nào lọt qua được, dù rất khó xảy ra ở các nhánh khớp tuyệt đối.
+      if (invSizeToken) {
+        let itemSizeToken = extractTireSizeToken(item.name) || extractTireSizeToken(item.desc);
+        if (itemSizeToken && itemSizeToken !== invSizeToken) continue;
+      }
+
       let normItemName = normalizeText(item.name);
       let normItemDesc = normalizeText(item.desc);
       let itemPrice = Number(item.buyPrice) || 0;
@@ -2965,9 +3112,23 @@
         nameScore = 900;
       } else if (normItemDesc === normRawName && normRawName.length > 0) {
         nameScore = 850;
-      } else if (normInvName.length >= 4 && (normItemName.includes(normInvName) || normInvName.includes(normItemName))) {
+      } else if (normInvName.length >= 4 && normItemName.length >= 4 && (normItemName.includes(normInvName) || normInvName.includes(normItemName))) {
+        // BUGFIX: bắt buộc normItemName.length >= 4 (không chỉ > 0) - 2 lý do:
+        // (1) Trong JS, chuỗi_bất_kỳ.includes('') LUÔN LUÔN trả về true. Nếu 1 dòng trong danh
+        // mục kho bị rỗng tên (VD dòng "Tổng" cộng dồn cuối file Excel lọt vào danh mục do cột
+        // Mã ghi chữ "Tổng"), normInvName.includes('') sẽ luôn TRUE -> dòng rác được tính
+        // nameScore=700 sai lầm. (Danh mục giờ đã lọc bỏ hẳn các dòng rỗng tên+diễn giải ở
+        // extractMasterItemsFromWorkbook(), nhưng vẫn giữ guard này làm lớp phòng thủ thứ 2.)
+        // (2) Tên hàng kho MISA CHỈ VÀI KÝ TỰ (VD "Ốp", "Vỏ") gần như chắc chắn không phải tên
+        // đầy đủ 1 mặt hàng, mà dễ TRÙNG NGẪU NHIÊN làm chuỗi con của rất nhiều tên hóa đơn
+        // khác nhau (VD "Ốp" là chuỗi con của "L[ố]p", "Tr[ố]p"...). Ca thực tế: hóa đơn Mai
+        // Thảo STT22 "Lốp Chengshin 120/70-12 WGV 58L TL" bị khớp nhầm vào phụ tùng Honda
+        // "Ốp bụng thùng xăng Ex 07 Đen Nhám zin" (desc chỉ vỏn vẹn "Ốp") chỉ vì "op" là chuỗi
+        // con của "lop", thay vì khớp đúng A.8696 (giá khớp chính xác 455.555,5đ). Ngưỡng >=4
+        // lấy tương xứng với ngưỡng đã áp dụng cho normInvName ở điều kiện phía trước.
         nameScore = 700;
-      } else if (normInvName.length >= 4 && (normItemDesc.includes(normInvName) || normInvName.includes(normItemDesc))) {
+      } else if (normInvName.length >= 4 && normItemDesc.length >= 4 && (normItemDesc.includes(normInvName) || normInvName.includes(normItemDesc))) {
+        // BUGFIX: cùng 2 lý do như trên, thêm guard normItemDesc.length >= 4.
         nameScore = 600;
       } else if (invKeywords.length >= 2) {
         let targetText = normItemName + ' ' + normItemDesc;
@@ -3001,10 +3162,40 @@
         // (VD: hóa đơn của "MAI THẢO" thì ưu tiên các mã có Kho ngầm định = "MAI THAO").
         // Không phạt điểm khi item không có tag Kho ngầm định hoặc tag khác NCC — chỉ CỘNG
         // điểm thưởng khi khớp đúng, để tránh loại oan các mặt hàng chưa được gắn tag NCC.
+        // [Bugfix NGHIÊM TRỌNG - trọng số 4000 cũ LỚN HƠN CẢ tổng điểm tên tối đa (1000) + điểm
+        // giá tối đa (500) cộng lại, khiến "cùng Kho ngầm định" biến từ 1 tín hiệu THAM KHẢO
+        // mềm (đúng như mô tả "chỉ CỘNG điểm thưởng" ở trên) thành 1 ĐIỀU KIỆN QUYẾT ĐỊNH áp
+        // đảo tuyệt đối - đủ sức ĐÈ BẸP 1 mặt hàng khớp Diễn giải LIỆT KÊ Y HỆT invName + giá
+        // trùng khít chỉ vì nó thuộc "Kho ngầm định" khác. Bằng chứng thực tế (hóa đơn Mai Thảo,
+        // đối chiếu với chính danh mục MISA thật của khách hàng): dòng "Săm Chengshin 2.50-17"
+        // có sẵn mã ĐÚNG TUYỆT ĐỐI trong kho (A.223, Diễn giải khớp 100% "Săm Chengshin
+        // 2.50-17", giá chỉ lệch 1.4%) nhưng bị mã A.124 (Diễn giải KHÁC hẳn "Lốp Chengshin
+        // 2.50-17 6P C6235 47L TT", giá lệch tới 267%) "cướp" mất CHỈ VÌ A.124 tình cờ cùng Kho
+        // ngầm định "MAI THAO" còn A.223 lại thuộc kho "MINH GIA VINH" - một mặt hàng hoàn toàn
+        // CÓ THỂ đã từng được nhập từ NCC khác trong quá khứ nhưng vẫn là ĐÚNG mã hàng cần đối
+        // chiếu cho hiện tại (Diễn giải khi mua chỉ ghi lại nguồn gốc LẦN NHẬP ĐẦU, không phải
+        // ràng buộc bắt buộc phải trùng NCC hiện tại). Giảm về mức chỉ đủ PHÁ THẾ HÒA giữa các
+        // ứng viên đã ngang điểm tên+giá (KHÔNG đủ để lật ngược 1 khoảng cách tên+giá đáng kể) -
+        // tương xứng với đúng 1 bậc chênh lệch điểm giá (100-350) như mô tả "CỘNG điểm thưởng".
+        //
+        // [Bugfix tiếp theo - 300 điểm VẪN ĐỦ lớn để lật ngược 1 bậc chênh lệch giá tối thiểu
+        // (100 điểm, khoảng cách nhỏ nhất giữa 2 bậc priceScore liền kề: 500/350/200/100/0)].
+        // Ca thực tế mới: kho MISA có 2 mã Michelin 80/90-14 CÙNG BỊ LỖI DỮ LIỆU trùng y hệt cột
+        // "Diễn giải khi mua" = "Vỏ Michelin 80/90-14 M/C 46S PILOT STREET 2 MSA TL" dù là 2 SẢN
+        // PHẨM KHÁC NHAU (1 mã Tên ghi "Pilot Moto GP", 1 mã Tên ghi đúng "Pilot Street 2" -
+        // khớp đúng tên mẫu lốp trên hóa đơn) - nên nameScore hòa tuyệt đối ở mức 900 cho cả 2.
+        // Giá hóa đơn 491.814,81đ so khớp RẤT SÁT mã "Pilot Street 2" (483.648đ, lệch 1,7% =
+        // priceScore 350) nhưng LỆCH XA mã "Pilot Moto GP" (558.962đ, lệch 12% = priceScore
+        // 200) - đúng ra giá phải là yếu tố quyết định khi tên đã hòa tuyệt đối. Nhưng vì mã sai
+        // "Pilot Moto GP" tình cờ cùng Kho ngầm định "KHANG MỸ PHÁT" (đúng NCC hóa đơn) còn mã
+        // đúng "Pilot Street 2" lại thuộc kho "AN THỊNH PHÁT" khác, 300 điểm kho vẫn đủ sức đè
+        // lên 150 điểm chênh lệch giá, khớp SAI. Hạ tiếp xuống 80 (< 100 - nhỏ hơn khoảng cách
+        // nhỏ nhất giữa 2 bậc priceScore) để đảm bảo "Kho ngầm định" CHỈ còn phá được thế hòa
+        // TUYỆT ĐỐI cả về tên lẫn giá, không bao giờ lật ngược được dù chỉ 1 bậc giá.
         let warehouseScore = 0;
         if (currentInvoiceWarehouseTag && item.warehouse &&
             removeVietnameseTones(item.warehouse).toLowerCase().trim() === removeVietnameseTones(currentInvoiceWarehouseTag).toLowerCase().trim()) {
-          warehouseScore = 4000;
+          warehouseScore = 80;
         }
 
         // Điểm NCC: đặt cao hơn hẳn điểm tên + giá cộng lại, để NCC luôn là điều kiện
