@@ -20,7 +20,7 @@
         </h1>
         <div class="flex items-center gap-2 mt-1">
           <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
-            <i class="fa-solid fa-shield-halved"></i> 4 File Tự Động Lưu Cố Định Đến Khi Có Bản Mới
+            <i class="fa-solid fa-shield-halved"></i> {{ coreFileCount }} File Tự Động Lưu Cố Định Đến Khi Có Bản Mới
           </span>
           <span class="text-slate-500 text-[10px] flex items-center gap-1 font-semibold">
             <i class="fa-solid fa-rotate text-blue-500" :class="{'fa-spin': isSyncing}"></i> {{ syncMessage }}
@@ -30,7 +30,7 @@
       <div class="flex flex-wrap items-center gap-2">
         <button @click="forceSyncGithub" :disabled="isSyncing" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg font-bold transition flex items-center gap-1.5 shadow-sm">
           <i class="fa-solid" :class="isSyncing ? 'fa-spinner fa-spin' : 'fa-arrows-rotate'"></i>
-          <span>{{ isSyncing ? syncStatusText : 'Tải 4 File Từ GitHub' }}</span>
+          <span>{{ isSyncing ? syncStatusText : 'Tải ' + coreFileCount + ' File Từ GitHub' }}</span>
         </button>
 
         <button @click="showGithubConfig = !showGithubConfig" class="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg font-bold transition flex items-center gap-1 shadow-xs" title="Cấu hình URL GitHub">
@@ -70,7 +70,7 @@
     <!-- Cảnh báo chi tiết khi đồng bộ GitHub bị lỗi 1 phần hoặc toàn bộ -->
     <div v-if="syncErrors.length > 0" class="mb-4 bg-rose-50 border border-rose-300 text-rose-900 p-3.5 rounded-xl shadow-sm">
       <div class="font-black flex items-center gap-1.5 mb-1.5">
-        <i class="fa-solid fa-triangle-exclamation"></i> Không tải được {{ syncErrors.length }} / 4 file từ GitHub ở lần đồng bộ gần nhất:
+        <i class="fa-solid fa-triangle-exclamation"></i> Không tải được {{ syncErrors.length }} / {{ coreFileCount }} file từ GitHub ở lần đồng bộ gần nhất:
       </div>
       <ul class="list-disc list-inside space-y-0.5 text-[11px] font-semibold">
         <li v-for="e in syncErrors" :key="e.label">
@@ -82,8 +82,8 @@
       </div>
     </div>
 
-    <!-- 5 KHỐI NẠP FILE -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+    <!-- 6 KHỐI NẠP FILE -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mb-4">
       <!-- 1. VT -->
       <div class="bg-white p-3.5 rounded-xl border shadow-sm flex flex-col justify-between" :class="meta.vt.loaded ? 'border-emerald-300 bg-emerald-50/20' : 'border-slate-200'">
         <div>
@@ -180,12 +180,36 @@
         </div>
       </div>
 
-      <!-- 5. File Đặt Hàng Tuần Này -->
+      <!-- 5. Ngày Tạo Mã -->
+      <div class="bg-white p-3.5 rounded-xl border shadow-sm flex flex-col justify-between" :class="meta.ngaytao.loaded ? 'border-emerald-300 bg-emerald-50/20' : 'border-slate-200'">
+        <div>
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-slate-800 uppercase flex items-center gap-1 text-[11px]">
+              <i class="fa-solid fa-calendar-plus text-teal-600"></i> 5. Ngày Tạo (ngaytao.xls)
+            </span>
+            <span v-if="meta.ngaytao.loaded" class="px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 font-bold text-[9px]">Lưu Cố Định</span>
+            <span v-else class="px-1.5 py-0.2 rounded bg-slate-100 text-slate-400 font-bold text-[9px]">Chưa Nạp</span>
+          </div>
+          <p class="text-slate-400 mt-1 text-[10px]">Ngày tạo mã & tính TB tháng cho mã mới</p>
+          <div v-if="meta.ngaytao.loaded" class="mt-2 text-[10px] text-slate-700 bg-white p-2 rounded border border-emerald-100">
+            <div>• Dữ liệu: <strong class="text-teal-700">{{ meta.ngaytao.count.toLocaleString() }}</strong> mã</div>
+            <div class="text-[9px] text-slate-400 mt-0.5">Bản lưu: {{ meta.ngaytao.date || 'Tự động' }}</div>
+          </div>
+        </div>
+        <div class="mt-3 pt-2.5 border-t border-slate-100">
+          <label class="block text-center py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded font-bold cursor-pointer transition text-[11px]">
+            <i class="fa-solid fa-cloud-arrow-up mr-1"></i> {{ meta.ngaytao.loaded ? 'Cập Nhật Ngày Tạo' : 'Chọn ngaytao.xls' }}
+            <input type="file" @change="onFileInputChange" accept=".xlsx, .xls" class="hidden"/>
+          </label>
+        </div>
+      </div>
+
+      <!-- 6. File Đặt Hàng Tuần Này -->
       <div class="bg-white p-3.5 rounded-xl border-2 shadow-sm flex flex-col justify-between" :class="meta.orderFile.loaded ? 'border-red-500 bg-red-50/30' : 'border-dashed border-red-300 bg-red-50/10'">
         <div>
           <div class="flex items-center justify-between">
             <span class="font-bold text-red-950 uppercase flex items-center gap-1 text-[11px]">
-              <i class="fa-solid fa-file-signature text-red-600"></i> 5. File Đặt Hàng Tuần Này
+              <i class="fa-solid fa-file-signature text-red-600"></i> 6. File Đặt Hàng Tuần Này
             </span>
             <span v-if="meta.orderFile.loaded" class="px-1.5 py-0.2 rounded bg-red-600 text-white font-bold text-[9px]">Đang Hiển Thị</span>
             <span v-else class="px-1.5 py-0.2 rounded bg-slate-200 text-slate-500 font-bold text-[9px]">Tùy Chọn</span>
@@ -232,7 +256,7 @@
     </div>
 
     <!-- KPI Cards -->
-    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 mb-4">
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2.5 mb-4">
       <div @click="toggleKpiFilter('all')" :class="activeKpiFilter === 'all' ? 'ring-2 ring-blue-600 bg-blue-50/50 shadow-md scale-[1.02]' : 'bg-white hover:border-slate-400'" class="p-3.5 rounded-xl border border-slate-200 shadow-sm cursor-pointer transition select-none flex flex-col justify-between">
         <span class="text-[10px] font-bold text-slate-500 uppercase">TẤT CẢ HIỂN THỊ</span>
         <div class="text-xl font-black text-slate-800 mt-1">{{ totalActiveCount }}</div>
@@ -270,6 +294,15 @@
         <span class="text-[10px] font-bold text-blue-700 uppercase">MÃ ĐÃ CHỐT ĐẶT</span>
         <div class="text-xl font-black text-blue-800 mt-1">{{ orderList.length }}</div>
         <div class="text-[10px] text-blue-600 mt-0.5">Bấm lọc mã SL đặt &gt; 0</div>
+      </div>
+
+      <div @click="toggleKpiFilter('orderOverMax')" :class="activeKpiFilter === 'orderOverMax' ? 'ring-2 ring-orange-600 bg-orange-100 shadow-md scale-[1.02]' : 'bg-orange-50/40 hover:bg-orange-100/60'" class="p-3.5 rounded-xl border border-orange-200 shadow-sm cursor-pointer transition select-none flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] font-bold text-orange-700 uppercase">CẢNH BÁO SL ĐẶT VƯỢT MAX</span>
+          <i class="fa-solid fa-triangle-exclamation text-orange-500"></i>
+        </div>
+        <div class="text-xl font-black text-orange-800 mt-1">{{ orderOverMaxCount }}</div>
+        <div class="text-[10px] text-orange-600 mt-0.5">Bấm lọc mã đặt vượt Max</div>
       </div>
 
       <div class="p-3.5 rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
@@ -337,9 +370,9 @@
             <tr>
               <th class="p-2.5 w-24 bg-indigo-50/70 text-indigo-950 border-r border-indigo-100">Nhà Cung Cấp</th>
               <th class="p-2.5 w-28">Mã Hàng</th>
+              <th class="p-2.5 text-center w-20 bg-teal-50/50 text-teal-950 font-bold border-x border-teal-100">Ngày Tạo</th>
               <th class="p-2.5 min-w-[240px]">Tên Phụ Tùng</th>
               <th class="p-2.5 text-center w-12">ĐVT</th>
-              <th class="p-2.5 text-center w-16 bg-amber-50/50 text-amber-950 font-bold border-x border-amber-100">Qui Cách</th>
               <th class="p-2.5 text-right w-20 bg-slate-200/50 font-black">Tồn Thực Tế</th>
               <th class="p-2.5 text-center w-24 bg-slate-100">Min - Max Cũ</th>
               <th class="p-2.5 text-center min-w-[260px] bg-sky-50/70 text-sky-950 border-x border-sky-200">
@@ -347,7 +380,6 @@
               </th>
               <th class="p-2.5 text-center w-20">Còn Bán</th>
               <th class="p-2.5 text-right w-20 text-indigo-700 bg-indigo-50/20">TB Tuần</th>
-              <th class="p-2.5 text-right w-28 bg-blue-50 text-blue-900 font-black">Gợi Ý Đặt</th>
               <th class="p-2.5 text-right w-32 bg-amber-50 text-amber-900 font-black">SL Đặt Thực Tế</th>
               <th class="p-2.5 text-right w-24 text-slate-600">Thành Tiền</th>
             </tr>
@@ -364,6 +396,13 @@
                 <span :class="hasSearch ? 'bg-amber-100 px-1 py-0.5 rounded font-black text-blue-900' : ''">{{ item.code }}</span>
               </td>
 
+              <td class="p-2 text-center bg-teal-50/30 border-x border-teal-100">
+                <div class="font-semibold text-slate-700 text-[10px]">{{ item.ngayTaoDisplay }}</div>
+                <span v-if="item.isNewCode" class="inline-block mt-0.5 px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800 font-bold text-[9px]">
+                  Mới ~{{ item.monthsSinceCreation }} tháng
+                </span>
+              </td>
+
               <td class="p-2">
                 <div class="font-medium text-slate-800">{{ item.name }}</div>
                 <div class="text-[10px] text-slate-400 mt-0.5">Giá vốn: {{ formatCurrency(item.costPrice) }}</div>
@@ -371,16 +410,17 @@
 
               <td class="p-2 text-center text-slate-500">{{ item.unit }}</td>
 
-              <td class="p-2 text-center bg-amber-50/30 font-bold border-x border-amber-100" :class="item.pack > 1 ? 'text-amber-900' : 'text-slate-400'">
-                {{ item.packDisplay }}
-              </td>
-
               <td class="p-2 text-right font-black bg-slate-50 text-sm" :class="getStockTextColor(item)">
                 {{ item.stock.toLocaleString() }}
               </td>
 
               <td class="p-2 text-center text-slate-600 whitespace-nowrap font-medium">
-                <span class="text-rose-600 font-bold">{{ item.min }}</span> / <span class="text-blue-700 font-bold">{{ item.max }}</span>
+                <div>
+                  <span class="text-rose-600 font-bold">{{ item.originalMin }}</span> / <span class="text-blue-700 font-bold">{{ item.originalMax }}</span>
+                </div>
+                <div v-if="item.isAdjusted" class="text-[9px] text-emerald-700 font-bold mt-0.5">
+                  Đang áp dụng: {{ item.min }} / {{ item.max }}
+                </div>
               </td>
 
               <td class="p-2 bg-sky-50/30 border-x border-sky-100">
@@ -406,7 +446,7 @@
                       </div>
                     </div>
                     <div>
-                      <button @click="applyNewMinMax(item)" :class="item.isAdjusted ? 'bg-emerald-600 text-white' : 'bg-sky-600 hover:bg-sky-700 text-white'" class="px-2.5 py-1 rounded font-bold text-[10px] transition shadow-xs whitespace-nowrap">
+                      <button @click="item.isAdjusted ? revertMinMax(item) : applyNewMinMax(item)" :class="item.isAdjusted ? 'bg-emerald-600 hover:bg-rose-600 text-white' : 'bg-sky-600 hover:bg-sky-700 text-white'" :title="item.isAdjusted ? 'Bấm để hủy, quay lại Min/Max Cũ' : 'Áp dụng Min/Max mới'" class="px-2.5 py-1 rounded font-bold text-[10px] transition shadow-xs whitespace-nowrap">
                         {{ item.isAdjusted ? '✓ Đã Áp Dụng' : 'Áp Dụng' }}
                       </button>
                     </div>
@@ -423,12 +463,11 @@
 
               <td class="p-2 text-right font-bold text-indigo-700 bg-indigo-50/20">{{ item.weeklyDemand.toFixed(1) }}</td>
 
-              <td class="p-2 text-right font-black text-blue-700 bg-blue-50/30 text-sm">
-                {{ item.suggestedOrder.toLocaleString() }}
-              </td>
-
               <td class="p-2 text-right bg-amber-50/30">
                 <input type="number" min="0" v-model.number="item.actualOrder" class="w-24 text-right px-2 py-1 bg-white border border-amber-300 rounded font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"/>
+                <div v-if="getOverMaxAdvice(item)" class="text-[9px] text-rose-600 font-bold mt-1 text-right leading-tight max-w-[140px] ml-auto">
+                  <i class="fa-solid fa-triangle-exclamation"></i> Vượt Max {{ getOverMaxAdvice(item).excess.toLocaleString() }} — đề xuất đặt {{ getOverMaxAdvice(item).suggestedQty.toLocaleString() }}
+                </div>
               </td>
 
               <td class="p-2 text-right font-semibold text-slate-700">
@@ -437,7 +476,7 @@
             </tr>
 
             <tr v-if="filteredItems.length === 0">
-              <td colspan="13" class="p-16 text-center text-slate-400">
+              <td colspan="12" class="p-16 text-center text-slate-400">
                 <div class="max-w-md mx-auto flex flex-col items-center">
                   <div class="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 text-2xl mb-3">
                     <i class="fa-solid fa-magnifying-glass"></i>
@@ -446,7 +485,7 @@
                     {{ hasSearch || activeKpiFilter !== 'all' ? 'Không có phụ tùng nào khớp với điều kiện lọc' : 'Chưa Có Dữ Liệu Hiển Thị' }}
                   </div>
                   <p class="text-xs text-slate-500 leading-relaxed">
-                    {{ hasSearch || activeKpiFilter !== 'all' ? 'Hãy thử chọn lại thẻ KPI "Tất cả hiển thị" hoặc xóa bớt từ khóa tìm kiếm.' : (meta.orderFile.loaded ? 'File đặt hàng trống.' : 'Bấm nút "Tải 4 File Từ GitHub" hoặc nạp file để bắt đầu.') }}
+                    {{ hasSearch || activeKpiFilter !== 'all' ? 'Hãy thử chọn lại thẻ KPI "Tất cả hiển thị" hoặc xóa bớt từ khóa tìm kiếm.' : (meta.orderFile.loaded ? 'File đặt hàng trống.' : 'Bấm nút "Tải ' + coreFileCount + ' File Từ GitHub" hoặc nạp file để bắt đầu.') }}
                   </p>
                 </div>
               </td>
@@ -548,14 +587,18 @@
     }
 
     const inMemoryDB = {
-      vt: {}, ton: {}, maxmin: {},
+      vt: {}, ton: {}, maxmin: {}, ngaytao: {}, adjustedMinMax: {},
       bh: { monthCount: 8, salesList: {}, sales: {} },
       orderFile: {}
     };
 
     createApp({
       setup() {
-        const items = shallowRef([]);
+        // Dùng ref() (reactive sâu) thay vì shallowRef(): trước đây gõ tay vào ô "SL Đặt Thực Tế"
+        // chỉ đổi giá trị JS thô, Vue không biết để vẽ lại nên cảnh báo "Vượt Max" (và cả tính
+        // lại tổng tiền, thẻ KPI) bị đứng hình, không cập nhật cho đến khi có thao tác khác kích
+        // hoạt vẽ lại toàn trang. ref() theo dõi từng mã, gõ tới đâu cập nhật ngay tới đó.
+        const items = ref([]);
         const searchQuery = ref('');
         const selectedNcc = ref('all');
         const activeKpiFilter = ref('all');
@@ -570,7 +613,10 @@
         const syncStatusText = ref('Đang kiểm tra...');
         const syncMessage = ref('Đang nạp bộ nhớ...');
         const showGithubConfig = ref(false);
-        const githubBaseUrl = ref(localStorage.getItem('user_github_base_url') || './');
+        // Mặc định trỏ thẳng vào repo GitHub chứa 5 file của bạn - nếu trước đó bạn đã tự cấu
+        // hình đường dẫn khác (lưu trong localStorage của trình duyệt) thì vẫn ưu tiên dùng lại.
+        const DEFAULT_GITHUB_BASE_URL = 'https://raw.githubusercontent.com/tythanhphat178-ops/dodondathangtrongmisa/main/';
+        const githubBaseUrl = ref(localStorage.getItem('user_github_base_url') || DEFAULT_GITHUB_BASE_URL);
         const syncErrors = ref([]);
 
         const meta = ref({
@@ -578,6 +624,7 @@
           ton: { loaded: false, fileName: '', date: '', count: 0 },
           maxmin: { loaded: false, fileName: '', date: '', count: 0 },
           bh: { loaded: false, fileName: '', date: '', count: 0, monthCount: 8 },
+          ngaytao: { loaded: false, fileName: '', date: '', count: 0 },
           orderFile: { loaded: false, fileName: '', date: '', count: 0 }
         });
 
@@ -608,8 +655,11 @@
           { type: 'vt', fileNames: ['VT.xls', 'VT_2.xls', 'vt.xls'], label: '1. Danh Mục VT' },
           { type: 'ton', fileNames: ['sv.xlsx', 'sv.xls', 'Ton.xls', 'Tồn.xls', 'SV.xlsx'], label: '2. Tồn Kho (sv)' },
           { type: 'maxmin', fileNames: ['TonMaxmin.xls', 'TonMaxmin_2.xls', 'Maxmin.xls', 'maxmin.xls', 'TonMaxMin.xls'], label: '3. TonMaxmin' },
-          { type: 'bh', fileNames: ['BH8thang.xls', 'BH tháng.xls', 'BH.xls', 'BH_8thang.xls'], label: '4. BH 8 Tháng' }
+          { type: 'bh', fileNames: ['BH8thang.xls', 'BH tháng.xls', 'BH.xls', 'BH_8thang.xls'], label: '4. BH 8 Tháng' },
+          { type: 'ngaytao', fileNames: ['ngaytao.xls', 'Ngaytao.xls', 'NgayTao.xls', 'NGAYTAO.xls', 'ngaytao.xlsx'], label: '5. Ngày Tạo Mã' }
         ];
+        // Số file lõi tự động đồng bộ từ GitHub mỗi khi mở trang (không tính File Đặt Hàng, vốn là tùy chọn thủ công).
+        const coreFileCount = coreFileDefinitions.length;
 
         // Hàm fetch an toàn: Thử tải trực tiếp -> nếu gặp lỗi CORS sẽ tự động đổi sang Proxy CORS
         // Ghi lại lý do lỗi cụ thể (404 / CORS / network) để hiển thị cho người dùng thay vì nuốt lỗi âm thầm.
@@ -700,6 +750,7 @@
                   const monthSheets = wb.SheetNames.filter(s => s.toLowerCase().includes('tháng') || (s.toLowerCase().startsWith('t') && /\d/.test(s)));
                   parseBH(wb, vFile, monthSheets);
                 }
+                else if (item.type === 'ngaytao') parseNgayTao(wb, vFile);
                 successList.push(item.label);
               } else if (!isAlreadyLoaded) {
                 console.warn(`Chưa tìm thấy file cho ${item.label}`, attemptErrors);
@@ -720,13 +771,13 @@
             }
 
             if (failList.length === 0 && updatedAny) {
-              syncMessage.value = `Đã cập nhật đủ 4/4 file và lưu cố định lúc ${new Date().toLocaleTimeString('vi-VN')}!`;
+              syncMessage.value = `Đã cập nhật đủ ${coreFileCount}/${coreFileCount} file và lưu cố định lúc ${new Date().toLocaleTimeString('vi-VN')}!`;
             } else if (failList.length === 0 && !updatedAny) {
-              syncMessage.value = `Dữ liệu 4 file đã nạp sẵn và lưu cố định`;
+              syncMessage.value = `Dữ liệu ${coreFileCount} file đã nạp sẵn và lưu cố định`;
             } else if (updatedAny && failList.length > 0) {
-              syncMessage.value = `⚠ Chỉ cập nhật được ${successList.length}/4 file. Lỗi: ${failList.map(f => f.label).join(', ')} — xem chi tiết bên dưới.`;
+              syncMessage.value = `⚠ Chỉ cập nhật được ${successList.length}/${coreFileCount} file. Lỗi: ${failList.map(f => f.label).join(', ')} — xem chi tiết bên dưới.`;
             } else {
-              syncMessage.value = `⚠ Không cập nhật được file nào trong 4 file. Xem chi tiết lỗi bên dưới.`;
+              syncMessage.value = `⚠ Không cập nhật được file nào trong ${coreFileCount} file. Xem chi tiết lỗi bên dưới.`;
             }
           } catch (err) {
             console.error('Lỗi nạp GitHub:', err);
@@ -795,11 +846,15 @@
             const savedState = await dbLoad('core_4files_state_dynamic_v6');
             if (savedState && savedState.meta && (savedState.meta.vt.loaded || savedState.meta.ton.loaded)) {
               meta.value = savedState.meta;
+              // Tương thích ngược: bản lưu cũ (trước khi có khối Ngày Tạo) sẽ chưa có key này.
+              if (!meta.value.ngaytao) meta.value.ngaytao = { loaded: false, fileName: '', date: '', count: 0 };
               if (savedState.inMemoryDB) {
                 inMemoryDB.vt = savedState.inMemoryDB.vt || {};
                 inMemoryDB.ton = savedState.inMemoryDB.ton || {};
                 inMemoryDB.maxmin = savedState.inMemoryDB.maxmin || {};
                 inMemoryDB.bh = savedState.inMemoryDB.bh || { monthCount: 8, salesList: {}, sales: {} };
+                inMemoryDB.ngaytao = savedState.inMemoryDB.ngaytao || {};
+                inMemoryDB.adjustedMinMax = savedState.inMemoryDB.adjustedMinMax || {};
                 inMemoryDB.orderFile = savedState.inMemoryDB.orderFile || {};
               }
               mergeAndRender();
@@ -874,6 +929,18 @@
             return;
           }
 
+          // Nhận diện ngaytao.xls SAU CÙNG, và CHỈ dựa vào tên sheet (không dò theo chữ "Ngày tạo"
+          // trong header nữa) - vì rất nhiều file xuất từ phần mềm kế toán (VT.xls, TonMaxmin.xls,
+          // BH8thang.xls...) cũng có sẵn cột "Ngày tạo" làm cột audit chuẩn, dò theo header sẽ nhận
+          // nhầm các file đó thành ngaytao.xls và làm mất dữ liệu VT/Maxmin/BH thật.
+          if (wb.SheetNames[0].toLowerCase().includes('ngaytao')) {
+            parseNgayTao(wb, file);
+            mergeAndRender();
+            autoSaveCoreDB();
+            alert(`Đã nạp thủ công ${meta.value.ngaytao.count} mã Ngày Tạo!`);
+            return;
+          }
+
           alert(`Không thể nhận diện file ${file.name}!`);
         };
 
@@ -942,6 +1009,43 @@
           meta.value.maxmin = { loaded: true, fileName: file.name, date: new Date().toLocaleDateString('vi-VN'), count: Object.keys(mmDict).length };
         };
 
+        // Chuyển giá trị ngày (chuỗi dd/mm/yyyy, hoặc số serial ngày của Excel) thành đối tượng Date.
+        // Trả về null nếu không đọc được, để tránh làm hỏng phép tính khi dữ liệu bẩn.
+        const parseVNDate = (val) => {
+          if (val instanceof Date && !isNaN(val.getTime())) return val;
+          if (typeof val === 'number' && val > 0) {
+            const utcDays = Math.floor(val - 25569);
+            const d = new Date(utcDays * 86400 * 1000);
+            return isNaN(d.getTime()) ? null : d;
+          }
+          const s = String(val || '').trim();
+          const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+          if (m) {
+            const d = new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
+            return isNaN(d.getTime()) ? null : d;
+          }
+          const d2 = new Date(s);
+          return isNaN(d2.getTime()) ? null : d2;
+        };
+
+        // Danh sách Ngày Tạo của từng mã (ngaytao.xls). Nếu 1 mã xuất hiện nhiều dòng,
+        // lấy ngày SỚM NHẤT (ngày tạo thật sự đầu tiên của mã đó).
+        const parseNgayTao = (wb, file) => {
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+          const ntDict = {};
+          rows.forEach(r => {
+            const code = String(r['Mã vật tư'] || r['Mã hàng'] || Object.values(r)[0] || '').trim();
+            const rawDate = r['Ngày tạo'] ?? r['Ngày Tạo'] ?? '';
+            if (!code || code === 'Mã vật tư' || rawDate === '') return;
+            const parsed = parseVNDate(rawDate);
+            if (parsed && (!ntDict[code] || parsed < ntDict[code])) {
+              ntDict[code] = parsed;
+            }
+          });
+          inMemoryDB.ngaytao = ntDict;
+          meta.value.ngaytao = { loaded: true, fileName: file.name, date: new Date().toLocaleDateString('vi-VN'), count: Object.keys(ntDict).length };
+        };
+
         const parseBH = (wb, file, monthSheets) => {
           const salesListDict = {};
           const totalSalesDict = {};
@@ -1008,17 +1112,21 @@
           const mmData = inMemoryDB.maxmin;
           const bhPayload = inMemoryDB.bh;
           const orderFileData = inMemoryDB.orderFile;
+          const ngaytaoData = inMemoryDB.ngaytao || {};
+          const adjustedMinMaxData = inMemoryDB.adjustedMinMax || {};
 
           const monthCount = bhPayload.monthCount || 8;
           const salesListDict = bhPayload.salesList || {};
           const salesDict = bhPayload.sales || {};
+          const today = new Date();
 
           const allCodes = new Set([
             ...Object.keys(orderFileData),
             ...Object.keys(vtData),
             ...Object.keys(tonData),
             ...Object.keys(mmData),
-            ...Object.keys(salesDict)
+            ...Object.keys(salesDict),
+            ...Object.keys(ngaytaoData)
           ]);
 
           if (allCodes.size === 0) return;
@@ -1031,16 +1139,36 @@
 
             const inOrderFile = !!ord;
             let stock = tonData[code] !== undefined ? tonData[code] : (ord ? ord.stock : 0);
-            
+
+            // Ngày tạo mã + số tháng mã đã thực sự tồn tại trong hệ thống (nếu có dữ liệu ngaytao.xls).
+            // Mã nào tồn tại CHƯA ĐỦ số tháng phân tích (monthCount) thì không được lấy tổng SL bán chia
+            // cho cả monthCount (sẽ ra TB Tháng thấp giả tạo) - phải chia cho đúng số tháng nó đã tồn tại.
+            const createdDate = ngaytaoData[code] || null;
+            let monthsSinceCreation = null;
+            if (createdDate) {
+              const diffDays = Math.max(0, (today - createdDate) / (1000 * 60 * 60 * 24));
+              monthsSinceCreation = Math.max(1, Math.ceil(diffDays / 30));
+            }
+            const ngayTaoDisplay = createdDate ? createdDate.toLocaleDateString('vi-VN') : '—';
+            const isNewCode = monthsSinceCreation !== null && monthsSinceCreation <= 2;
+
             let monthlyDemand = 0;
             const mList = salesListDict[code] || [];
+            let sumQty, monthsBasis;
             if (mList.length > 0) {
               const validMonths = excludeZeroMonths.value ? mList.filter(v => v > 0) : mList;
-              const sum = validMonths.reduce((a, b) => a + b, 0);
-              monthlyDemand = validMonths.length > 0 ? (sum / validMonths.length) : 0;
+              sumQty = validMonths.reduce((a, b) => a + b, 0);
+              monthsBasis = validMonths.length > 0 ? validMonths.length : mList.length;
             } else {
-              monthlyDemand = (salesDict[code] || 0) / monthCount;
+              sumQty = salesDict[code] || 0;
+              monthsBasis = monthCount;
             }
+            // Mã mới tạo (còn tồn tại ít tháng hơn khoảng phân tích): thu hẹp mẫu số lại đúng
+            // bằng số tháng mã đã tồn tại, không chia theo cả monthCount như mã cũ.
+            if (monthsSinceCreation !== null && monthsSinceCreation < monthsBasis) {
+              monthsBasis = monthsSinceCreation;
+            }
+            monthlyDemand = monthsBasis > 0 ? (sumQty / monthsBasis) : 0;
 
             const weeklyDemand = monthlyDemand / 4.0;
             const avgPerDay = monthlyDemand / 30.0;
@@ -1050,8 +1178,11 @@
             const unit = vt.unit || 'Cái';
             const costPrice = vt.costPrice || 0;
 
-            let min = mm.min !== undefined ? mm.min : (vt.min || 0);
-            let max = vt.max || (min > 0 ? min * 2 : 0);
+            // Min/Max GỐC (Cũ) - luôn lấy từ dữ liệu nguồn (VT.xls / TonMaxmin.xls), không bao giờ
+            // bị đổi bởi việc bấm "Áp Dụng" - dùng để hiển thị cột "Min - Max Cũ" và để so sánh
+            // đối chiếu lâu dài, không bị trôi theo đề xuất.
+            const originalMin = mm.min !== undefined ? mm.min : (vt.min || 0);
+            const originalMax = vt.max || (originalMin > 0 ? originalMin * 2 : 0);
             const ncc = mm.ncc || vt.ncc || 'Honda';
 
             const pack = ord ? ord.pack : 1;
@@ -1060,9 +1191,24 @@
             const sugMin = Math.max(1, Math.ceil(weeklyDemand));
             const sugMax = Math.max(sugMin * 2, Math.ceil(weeklyDemand * 2.5));
 
-            let advice = 'Định mức an toàn';
-            if (stock <= min) advice = 'Tồn thấp, đề xuất tăng Min lên ' + sugMin;
-            else if (stock > max) advice = 'Tồn cao, đề xuất hạ Max xuống ' + sugMax;
+            // Nếu mã này đã được bấm "Áp Dụng" đề xuất mới trước đó (lưu cố định trong
+            // adjustedMinMaxData), dùng Min/Max đã điều chỉnh làm định mức ĐANG ÁP DỤNG hiện hành
+            // thay vì định mức cũ - mọi cảnh báo/tính toán tồn kho phía dưới đều theo mức mới này.
+            const adj = adjustedMinMaxData[code];
+            const isAdjusted = !!adj;
+            const min = isAdjusted ? adj.min : originalMin;
+            const max = isAdjusted ? adj.max : originalMax;
+
+            let advice;
+            if (isAdjusted) {
+              advice = `Đã áp dụng định mức mới: Min ${min} / Max ${max} (Cũ: ${originalMin} / ${originalMax})`;
+            } else if (stock <= min) {
+              advice = 'Tồn thấp, đề xuất tăng Min lên ' + sugMin;
+            } else if (stock > max) {
+              advice = 'Tồn cao, đề xuất hạ Max xuống ' + sugMax;
+            } else {
+              advice = 'Định mức an toàn';
+            }
 
             const targetStock = Math.max(max, Math.ceil(weeklyDemand * bufferMultiplier.value));
             let rawSuggested = 0;
@@ -1081,14 +1227,15 @@
             merged.push({
               code, name, unit, costPrice, stock, min, max, ncc, pack, packDisplay, inOrderFile,
               monthlyDemand, weeklyDemand, avgPerDay, daysLeft,
+              ngayTaoDisplay, monthsSinceCreation, isNewCode,
               suggestedOrder: rawSuggested,
               actualOrder: actualOrder,
               suggestedMin: sugMin,
               suggestedMax: sugMax,
               adviceReason: advice,
-              isAdjusted: false,
-              originalMin: min,
-              originalMax: max,
+              isAdjusted,
+              originalMin,
+              originalMax,
               _codeRaw: String(code).toLowerCase().trim(),
               _cleanCode: cleanCode(code),
               _normName: removeAccents(name),
@@ -1102,11 +1249,16 @@
 
         const recalculateAll = () => { mergeAndRender(); autoSaveCoreDB(); };
 
+        // Lưu Min/Max mới đã áp dụng vào inMemoryDB.adjustedMinMax (được autoSaveCoreDB lưu cố
+        // định cùng 5 file kia) để mức mới không bị mất khi mergeAndRender tính lại từ dữ liệu gốc.
         const applyNewMinMax = (item) => {
-          item.min = item.suggestedMin;
-          item.max = item.suggestedMax;
-          item.isAdjusted = true;
-          item.adviceReason = 'Đã áp dụng định mức mới';
+          inMemoryDB.adjustedMinMax[item.code] = { min: item.suggestedMin, max: item.suggestedMax };
+          recalculateAll();
+        };
+
+        // Hủy áp dụng - quay lại dùng Min/Max Cũ (gốc) cho mã này.
+        const revertMinMax = (item) => {
+          delete inMemoryDB.adjustedMinMax[item.code];
           recalculateAll();
         };
 
@@ -1155,6 +1307,7 @@
             if (activeKpiFilter.value === 'safe' && (i.stock <= i.min || i.stock > i.max)) return false;
             if (activeKpiFilter.value === 'overMax' && i.stock <= i.max) return false;
             if (activeKpiFilter.value === 'needOrder' && (i.actualOrder || 0) <= 0) return false;
+            if (activeKpiFilter.value === 'orderOverMax' && !getOverMaxAdvice(i)) return false;
 
             return true;
           });
@@ -1177,6 +1330,7 @@
             case 'safe': return 'Tồn An Toàn';
             case 'overMax': return 'Vượt Max';
             case 'needOrder': return 'Mã Đã Chốt Đặt';
+            case 'orderOverMax': return 'Cảnh Báo SL Đặt Vượt Max';
             default: return 'Tất cả';
           }
         };
@@ -1191,6 +1345,21 @@
         const getDaysLeftClass = (d) => d <= 3 ? 'bg-rose-100 text-rose-700 font-black' : (d <= 7 ? 'bg-orange-100 text-orange-700 font-bold' : 'bg-emerald-100 text-emerald-700');
         const formatCurrency = (val) => val ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val) : '0 đ';
 
+        // So trực tiếp SL Đặt Thực Tế với định mức Max ĐANG ÁP DỤNG hiện hành: nếu mã đã được
+        // bấm "Áp Dụng" đề xuất mới thì dùng Max MỚI (item.max, lúc này = suggestedMax đã áp
+        // dụng); mã nào chưa áp dụng thì item.max vẫn chính là Max Cũ (originalMax) như cũ.
+        // Đặt = Max đang áp dụng thì không cảnh báo, đặt lớn hơn mới cảnh báo.
+        const getOverMaxAdvice = (item) => {
+          const maxActive = item.max;
+          if (!maxActive || maxActive <= 0) return null;
+          const order = item.actualOrder || 0;
+          if (order <= maxActive) return null;
+          return {
+            excess: Math.round(order - maxActive),
+            suggestedQty: Math.round(maxActive)
+          };
+        };
+
         const currentActiveBase = computed(() => {
           const q = searchQuery.value.trim();
           const hasOrderFile = meta.value.orderFile && meta.value.orderFile.loaded;
@@ -1203,6 +1372,7 @@
         const safeCount = computed(() => currentActiveBase.value.filter(i => i.stock > i.min && i.stock <= i.max).length);
         const overMaxCount = computed(() => currentActiveBase.value.filter(i => i.stock > i.max).length);
         const orderList = computed(() => currentActiveBase.value.filter(i => (i.actualOrder || 0) > 0));
+        const orderOverMaxCount = computed(() => currentActiveBase.value.filter(i => getOverMaxAdvice(i)).length);
 
         const totalOrderQty = computed(() => filteredItems.value.reduce((s, i) => s + (i.actualOrder || 0), 0));
         const totalEstimatedCost = computed(() => filteredItems.value.reduce((s, i) => s + (i.actualOrder || 0) * (i.costPrice || 0), 0));
@@ -1236,7 +1406,7 @@
 
         const confirmClearCoreDB = async () => {
           if (confirm('Bạn có chắc muốn XÓA BỘ NHỚ LƯU TRỮ?')) {
-            inMemoryDB.vt = {}; inMemoryDB.ton = {}; inMemoryDB.maxmin = {};
+            inMemoryDB.vt = {}; inMemoryDB.ton = {}; inMemoryDB.maxmin = {}; inMemoryDB.ngaytao = {}; inMemoryDB.adjustedMinMax = {};
             inMemoryDB.bh = { monthCount: 8, salesList: {}, sales: {} };
             inMemoryDB.orderFile = {};
             meta.value = {
@@ -1244,6 +1414,7 @@
               ton: { loaded: false, fileName: '', date: '', count: 0 },
               maxmin: { loaded: false, fileName: '', date: '', count: 0 },
               bh: { loaded: false, fileName: '', date: '', count: 0, monthCount: 8 },
+              ngaytao: { loaded: false, fileName: '', date: '', count: 0 },
               orderFile: { loaded: false, fileName: '', date: '', count: 0 }
             };
             items.value = [];
@@ -1254,13 +1425,13 @@
 
         return {
           items, meta, searchQuery, hasSearch, selectedNcc, activeKpiFilter, bufferMultiplier, roundByPack, excludeZeroMonths,
-          currentPage, totalPages, pagedItems, supplierList, filteredItems, totalActiveCount, underMinCount, safeCount, overMaxCount, orderList,
+          currentPage, totalPages, pagedItems, supplierList, filteredItems, totalActiveCount, underMinCount, safeCount, overMaxCount, orderList, orderOverMaxCount,
           totalOrderQty, totalEstimatedCost, currentNccOrderCount,
-          onFileInputChange, closeOrderFile, loadSampleData, toggleKpiFilter, getKpiLabel, recalculateAll, applyNewMinMax,
+          onFileInputChange, closeOrderFile, loadSampleData, toggleKpiFilter, getKpiLabel, recalculateAll, applyNewMinMax, revertMinMax,
           exportMinMaxComparisonExcel, exportCurrentFilteredOrder,
-          getStockTextColor, getStockStatusText, getProgressBarColor, getStockPercentage, getDaysLeftClass, formatCurrency,
+          getStockTextColor, getStockStatusText, getProgressBarColor, getStockPercentage, getDaysLeftClass, formatCurrency, getOverMaxAdvice,
           confirmClearCoreDB,
-          isSyncing, syncStatusText, syncMessage, showGithubConfig, githubBaseUrl, saveGithubConfig, forceSyncGithub, syncErrors
+          isSyncing, syncStatusText, syncMessage, showGithubConfig, githubBaseUrl, saveGithubConfig, forceSyncGithub, syncErrors, coreFileCount
         };
       }
     }).mount('#app');
