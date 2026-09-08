@@ -298,11 +298,11 @@
 
       <div @click="toggleKpiFilter('orderOverMax')" :class="activeKpiFilter === 'orderOverMax' ? 'ring-2 ring-orange-600 bg-orange-100 shadow-md scale-[1.02]' : 'bg-orange-50/40 hover:bg-orange-100/60'" class="p-3.5 rounded-xl border border-orange-200 shadow-sm cursor-pointer transition select-none flex flex-col justify-between">
         <div class="flex items-center justify-between">
-          <span class="text-[10px] font-bold text-orange-700 uppercase">CẢNH BÁO SL ĐẶT VƯỢT MAX</span>
+          <span class="text-[10px] font-bold text-orange-700 uppercase">CẦN ĐIỀU CHỈNH SL ĐẶT</span>
           <i class="fa-solid fa-triangle-exclamation text-orange-500"></i>
         </div>
         <div class="text-xl font-black text-orange-800 mt-1">{{ orderOverMaxCount }}</div>
-        <div class="text-[10px] text-orange-600 mt-0.5">Bấm lọc mã đặt vượt Max</div>
+        <div class="text-[10px] text-orange-600 mt-0.5">Bấm lọc mã cần xem lại SL đặt (không tính mã "có thể không đặt")</div>
       </div>
 
       <div class="p-3.5 rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
@@ -368,20 +368,21 @@
         <table class="w-full text-left border-collapse">
           <thead class="sticky top-0 z-10 bg-slate-100 text-slate-700 uppercase font-bold border-b border-slate-200 text-[11px]">
             <tr>
-              <th class="p-2.5 w-24 bg-indigo-50/70 text-indigo-950 border-r border-indigo-100">Nhà Cung Cấp</th>
-              <th class="p-2.5 w-28">Mã Hàng</th>
-              <th class="p-2.5 text-center w-20 bg-teal-50/50 text-teal-950 font-bold border-x border-teal-100">Ngày Tạo</th>
-              <th class="p-2.5 min-w-[240px]">Tên Phụ Tùng</th>
-              <th class="p-2.5 text-center w-12">ĐVT</th>
-              <th class="p-2.5 text-right w-20 bg-slate-200/50 font-black">Tồn Thực Tế</th>
-              <th class="p-2.5 text-center w-24 bg-slate-100">Min - Max Cũ</th>
-              <th class="p-2.5 text-center min-w-[260px] bg-sky-50/70 text-sky-950 border-x border-sky-200">
-                Đo Mức Độ Tồn & Tư Vấn Min/Max Mới
+              <th @click="toggleSort('ncc')" class="p-2.5 w-24 bg-indigo-50/70 text-indigo-950 border-r border-indigo-100 cursor-pointer select-none hover:bg-indigo-100/70">Nhà Cung Cấp <i :class="sortIconClass('ncc')" class="ml-0.5 text-[9px]"></i></th>
+              <th @click="toggleSort('code')" class="p-2.5 w-28 cursor-pointer select-none hover:bg-slate-200/60">Mã Hàng <i :class="sortIconClass('code')" class="ml-0.5 text-[9px]"></i></th>
+              <th @click="toggleSort('createdDate')" class="p-2.5 text-center w-20 bg-teal-50/50 text-teal-950 font-bold border-x border-teal-100 cursor-pointer select-none hover:bg-teal-100/70">Ngày Tạo <i :class="sortIconClass('createdDate')" class="ml-0.5 text-[9px]"></i></th>
+              <th @click="toggleSort('name')" class="p-2.5 min-w-[240px] cursor-pointer select-none hover:bg-slate-200/60">Tên Phụ Tùng <i :class="sortIconClass('name')" class="ml-0.5 text-[9px]"></i></th>
+              <th @click="toggleSort('unit')" class="p-2.5 text-center w-12 cursor-pointer select-none hover:bg-slate-200/60">ĐVT <i :class="sortIconClass('unit')" class="ml-0.5 text-[9px]"></i></th>
+              <th @click="toggleSort('stock')" class="p-2.5 text-right w-20 bg-slate-200/50 font-black cursor-pointer select-none hover:bg-slate-300/60">Tồn Thực Tế <i :class="sortIconClass('stock')" class="ml-0.5 text-[9px]"></i></th>
+              <th @click="toggleSort('maxCu')" class="p-2.5 text-center w-24 bg-slate-100 cursor-pointer select-none hover:bg-slate-200/70">Min - Max Cũ <i :class="sortIconClass('maxCu')" class="ml-0.5 text-[9px]"></i></th>
+              <th @click="toggleSort('stockPercent')" class="p-2.5 text-center min-w-[260px] bg-sky-50/70 text-sky-950 border-x border-sky-200 cursor-pointer select-none hover:bg-sky-100/70">
+                Đo Mức Độ Tồn & Tư Vấn Min/Max Mới <i :class="sortIconClass('stockPercent')" class="ml-0.5 text-[9px]"></i>
               </th>
-              <th class="p-2.5 text-center w-20">Còn Bán</th>
-              <th class="p-2.5 text-right w-20 text-indigo-700 bg-indigo-50/20">TB Tuần</th>
-              <th class="p-2.5 text-right w-32 bg-amber-50 text-amber-900 font-black">SL Đặt Thực Tế</th>
-              <th class="p-2.5 text-right w-24 text-slate-600">Thành Tiền</th>
+              <th @click="toggleSort('daysLeft')" class="p-2.5 text-center w-20 cursor-pointer select-none hover:bg-slate-200/60">Còn Bán <i :class="sortIconClass('daysLeft')" class="ml-0.5 text-[9px]"></i></th>
+              <th @click="toggleSort('weeklyDemand')" class="p-2.5 text-right w-20 text-indigo-700 bg-indigo-50/20 cursor-pointer select-none hover:bg-indigo-100/40">TB Tuần <i :class="sortIconClass('weeklyDemand')" class="ml-0.5 text-[9px]"></i></th>
+              <th @click="toggleSort('actualOrder')" class="p-2.5 text-right w-32 bg-amber-50 text-amber-900 font-black cursor-pointer select-none hover:bg-amber-100">SL Đặt Thực Tế <i :class="sortIconClass('actualOrder')" class="ml-0.5 text-[9px]"></i></th>
+              <th @click="toggleSort('suggestedQty')" class="p-2.5 text-center w-36 bg-teal-50/70 text-teal-950 font-black border-x border-teal-100 cursor-pointer select-none hover:bg-teal-100/70">Gợi Ý Đặt Hàng <i :class="sortIconClass('suggestedQty')" class="ml-0.5 text-[9px]"></i></th>
+              <th @click="toggleSort('thanhTien')" class="p-2.5 text-right w-24 text-slate-600 cursor-pointer select-none hover:bg-slate-200/60">Thành Tiền <i :class="sortIconClass('thanhTien')" class="ml-0.5 text-[9px]"></i></th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-200">
@@ -465,9 +466,32 @@
 
               <td class="p-2 text-right bg-amber-50/30">
                 <input type="number" min="0" v-model.number="item.actualOrder" class="w-24 text-right px-2 py-1 bg-white border border-amber-300 rounded font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"/>
-                <div v-if="getOverMaxAdvice(item)" class="text-[9px] text-rose-600 font-bold mt-1 text-right leading-tight max-w-[140px] ml-auto">
-                  <i class="fa-solid fa-triangle-exclamation"></i> Vượt Max {{ getOverMaxAdvice(item).excess.toLocaleString() }} — đề xuất đặt {{ getOverMaxAdvice(item).suggestedQty.toLocaleString() }}
-                </div>
+              </td>
+
+              <td class="p-2 text-center bg-teal-50/20 border-x border-teal-100">
+                <template v-if="getOrderDisplay(item).kind === 'nodata'">
+                  <span class="text-[10px] text-slate-400 italic" :title="getOrderDisplay(item).message">Không đủ dữ liệu</span>
+                </template>
+                <template v-else-if="getOrderDisplay(item).kind === 'ok'">
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[11px]" :title="getOrderDisplay(item).message">
+                    <i class="fa-solid fa-circle-check"></i> {{ getOrderDisplay(item).suggestedQty.toLocaleString() }}
+                  </span>
+                </template>
+                <template v-else-if="getOrderDisplay(item).kind === 'suppressed'">
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-semibold text-[10px]" :title="getOrderDisplay(item).message">
+                    <i class="fa-regular fa-circle-question"></i> Có thể không đặt
+                  </span>
+                </template>
+                <template v-else>
+                  <div class="inline-flex flex-col items-center gap-1">
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-100 text-orange-800 font-black text-[13px] ring-1 ring-orange-300" :title="getOrderDisplay(item).message">
+                      <i class="fa-solid fa-triangle-exclamation"></i> {{ getOrderDisplay(item).suggestedQty.toLocaleString() }}
+                    </span>
+                    <button @click="applySuggestedOrderQty(item)" class="text-[9px] font-bold text-blue-700 hover:text-blue-900 underline underline-offset-2">
+                      Tham khảo SL này
+                    </button>
+                  </div>
+                </template>
               </td>
 
               <td class="p-2 text-right font-semibold text-slate-700">
@@ -476,7 +500,7 @@
             </tr>
 
             <tr v-if="filteredItems.length === 0">
-              <td colspan="12" class="p-16 text-center text-slate-400">
+              <td colspan="13" class="p-16 text-center text-slate-400">
                 <div class="max-w-md mx-auto flex flex-col items-center">
                   <div class="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 text-2xl mb-3">
                     <i class="fa-solid fa-magnifying-glass"></i>
@@ -608,6 +632,57 @@
 
         const currentPage = ref(1);
         const pageSize = ref(80);
+
+        // Sắp xếp bảng: bấm vào tiêu đề cột để sắp xếp tăng/giảm dần theo cột đó.
+        const sortKey = ref(null);
+        const sortDir = ref('asc');
+        const toggleSort = (key) => {
+          if (sortKey.value === key) {
+            sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc';
+          } else {
+            sortKey.value = key;
+            sortDir.value = 'asc';
+          }
+          currentPage.value = 1;
+        };
+        const sortIconClass = (key) => {
+          if (sortKey.value !== key) return 'fa-solid fa-sort text-slate-300';
+          return sortDir.value === 'asc' ? 'fa-solid fa-sort-up text-indigo-700' : 'fa-solid fa-sort-down text-indigo-700';
+        };
+        // Lấy giá trị dùng để so sánh khi sắp xếp theo 1 cột cụ thể.
+        const getSortValue = (item, key) => {
+          switch (key) {
+            case 'ncc': return item.ncc || '';
+            case 'code': return item.code || '';
+            case 'createdDate': return item.createdDateValue === null || item.createdDateValue === undefined ? -Infinity : item.createdDateValue;
+            case 'name': return item.name || '';
+            case 'unit': return item.unit || '';
+            case 'stock': return item.stock || 0;
+            case 'maxCu': return item.originalMax || 0;
+            case 'stockPercent': return getStockPercentage(item);
+            case 'daysLeft': return item.avgPerDay > 0 ? item.daysLeft : Infinity;
+            case 'weeklyDemand': return item.weeklyDemand || 0;
+            case 'actualOrder': return item.actualOrder || 0;
+            case 'suggestedQty': { const d = getOrderDisplay(item); return d.kind === 'nodata' ? -Infinity : d.suggestedQty; }
+            case 'thanhTien': return (item.actualOrder || 0) * (item.costPrice || 0);
+            default: return 0;
+          }
+        };
+        const sortedItems = computed(() => {
+          const key = sortKey.value;
+          if (!key) return filteredItems.value;
+          const dir = sortDir.value === 'asc' ? 1 : -1;
+          return [...filteredItems.value].sort((a, b) => {
+            const va = getSortValue(a, key);
+            const vb = getSortValue(b, key);
+            if (typeof va === 'string' || typeof vb === 'string') {
+              return String(va).localeCompare(String(vb), 'vi') * dir;
+            }
+            if (va < vb) return -1 * dir;
+            if (va > vb) return 1 * dir;
+            return 0;
+          });
+        });
 
         const isSyncing = ref(false);
         const syncStatusText = ref('Đang kiểm tra...');
@@ -1228,6 +1303,7 @@
               code, name, unit, costPrice, stock, min, max, ncc, pack, packDisplay, inOrderFile,
               monthlyDemand, weeklyDemand, avgPerDay, daysLeft,
               ngayTaoDisplay, monthsSinceCreation, isNewCode,
+              createdDateValue: createdDate ? createdDate.getTime() : null,
               suggestedOrder: rawSuggested,
               actualOrder: actualOrder,
               suggestedMin: sugMin,
@@ -1307,7 +1383,7 @@
             if (activeKpiFilter.value === 'safe' && (i.stock <= i.min || i.stock > i.max)) return false;
             if (activeKpiFilter.value === 'overMax' && i.stock <= i.max) return false;
             if (activeKpiFilter.value === 'needOrder' && (i.actualOrder || 0) <= 0) return false;
-            if (activeKpiFilter.value === 'orderOverMax' && !getOverMaxAdvice(i)) return false;
+            if (activeKpiFilter.value === 'orderOverMax' && getOrderDisplay(i).kind !== 'suggest') return false;
 
             return true;
           });
@@ -1330,13 +1406,13 @@
             case 'safe': return 'Tồn An Toàn';
             case 'overMax': return 'Vượt Max';
             case 'needOrder': return 'Mã Đã Chốt Đặt';
-            case 'orderOverMax': return 'Cảnh Báo SL Đặt Vượt Max';
+            case 'orderOverMax': return 'Cần Điều Chỉnh SL Đặt';
             default: return 'Tất cả';
           }
         };
 
         const totalPages = computed(() => Math.ceil(filteredItems.value.length / pageSize.value));
-        const pagedItems = computed(() => filteredItems.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value));
+        const pagedItems = computed(() => sortedItems.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value));
 
         const getStockTextColor = (item) => item.stock <= item.min ? 'text-rose-600' : (item.stock > item.max ? 'text-purple-700' : 'text-emerald-700');
         const getStockStatusText = (item) => item.stock <= item.min ? 'Dưới Min' : (item.stock > item.max ? 'Vượt Max' : 'An Toàn');
@@ -1345,19 +1421,110 @@
         const getDaysLeftClass = (d) => d <= 3 ? 'bg-rose-100 text-rose-700 font-black' : (d <= 7 ? 'bg-orange-100 text-orange-700 font-bold' : 'bg-emerald-100 text-emerald-700');
         const formatCurrency = (val) => val ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val) : '0 đ';
 
-        // So trực tiếp SL Đặt Thực Tế với định mức Max ĐANG ÁP DỤNG hiện hành: nếu mã đã được
-        // bấm "Áp Dụng" đề xuất mới thì dùng Max MỚI (item.max, lúc này = suggestedMax đã áp
-        // dụng); mã nào chưa áp dụng thì item.max vẫn chính là Max Cũ (originalMax) như cũ.
-        // Đặt = Max đang áp dụng thì không cảnh báo, đặt lớn hơn mới cảnh báo.
-        const getOverMaxAdvice = (item) => {
-          const maxActive = item.max;
-          if (!maxActive || maxActive <= 0) return null;
+        // Làm tròn theo Qui cách đóng gói (giống cách app đang làm tròn Gợi Ý Đặt), dùng chung
+        // cho mọi số lượng đề xuất trong tư vấn điều chỉnh bên dưới.
+        const roundQtyByPack = (qty, item) => {
+          const q = Math.max(0, Math.round(qty));
+          if (roundByPack.value && item.pack > 1 && q > 0) return Math.ceil(q / item.pack) * item.pack;
+          return q;
+        };
+
+        // Gợi ý đặt hàng: kết hợp Min-Max Cũ, Min-Max Mới (đề xuất theo doanh số gần đây)
+        // và ngày tạo mã hàng, để ra 1 con số gợi ý đặt hàng duy nhất.
+        //
+        // Khoảng an toàn [safeMin, safeMax] được chọn theo thứ tự ưu tiên:
+        //  1. Mã mới tạo (isNewCode, <=2 tháng): Cũ chưa có chính sách chính thức (mã chưa từng
+        //     tồn tại đủ lâu để đặt Min-Max) -> dùng thẳng Min-Max Mới.
+        //  2. Mã cũ, Cũ và Mới giao nhau được (khoảng giao hợp lệ): dùng khoảng giao
+        //     [max(minCũ,minMới), min(maxCũ,maxMới)] -> vừa tôn trọng định mức đã duyệt,
+        //     vừa không bỏ qua biến động bán hàng gần đây.
+        //  3. Mã cũ, Cũ và Mới không giao nhau được (Cũ có vẻ đã lỗi thời so với thực tế) nhưng
+        //     vẫn có Mới -> dùng thẳng Mới.
+        //  4. Không có Mới lẫn Cũ để so sánh -> không đủ dữ liệu.
+        //
+        // Từ khoảng an toàn đó, gợi ý đặt = SL đang nhập, ép về trong khoảng
+        // [Tồn cần thêm để đạt safeMin, Tồn tối đa thêm để không vượt safeMax].
+        // CHÚ Ý: cột này KHÔNG làm tròn theo Qui Cách đóng gói - luôn hiển thị đúng số lượng
+        // thực sự cần thêm/bớt, để không gây hiểu lầm khi qui cách đóng gói (vd 1 kiện = 50, 100 cái)
+        // lớn hơn nhiều so với Min/Max thực tế của mã hàng.
+        const getOrderAdvice = (item) => {
+          const stock = item.stock || 0;
           const order = item.actualOrder || 0;
-          if (order <= maxActive) return null;
-          return {
-            excess: Math.round(order - maxActive),
-            suggestedQty: Math.round(maxActive)
-          };
+          const minCu = item.originalMin || 0;
+          const maxCu = item.originalMax || 0;
+          const minMoi = item.suggestedMin || 0;
+          const maxMoi = item.suggestedMax || 0;
+
+          let safeMin = null, safeMax = null, source = 'none';
+          const hasCu = maxCu > 0;
+          const hasMoi = maxMoi > 0;
+
+          if (item.isNewCode) {
+            if (hasMoi) { safeMin = minMoi; safeMax = maxMoi; source = 'moi'; }
+          } else if (hasCu && hasMoi) {
+            const gMin = Math.max(minCu, minMoi);
+            const gMax = Math.min(maxCu, maxMoi);
+            if (gMin <= gMax) { safeMin = gMin; safeMax = gMax; source = 'giao'; }
+            else { safeMin = minMoi; safeMax = maxMoi; source = 'moi'; }
+          } else if (hasMoi) {
+            safeMin = minMoi; safeMax = maxMoi; source = 'moi';
+          } else if (hasCu) {
+            safeMin = minCu; safeMax = maxCu; source = 'cu';
+          }
+
+          if (safeMax === null) {
+            return { hasData: false, changed: false, suggestedQty: order, diff: 0, safeMin: 0, safeMax: 0, source: 'none', message: 'Không đủ dữ liệu để so sánh (chưa có Min-Max Cũ lẫn doanh số gần đây)' };
+          }
+
+          const minNeed = Math.max(0, safeMin - stock); // SL tối thiểu cần đặt để tồn đạt safeMin
+          const maxNeed = Math.max(0, safeMax - stock); // SL tối đa được đặt để tồn không vượt safeMax
+          let sugQty = order;
+          if (sugQty < minNeed) sugQty = minNeed;
+          if (sugQty > maxNeed) sugQty = maxNeed;
+          sugQty = Math.max(0, Math.round(sugQty));
+
+          const changed = sugQty !== order;
+          let message;
+          if (!changed) message = 'Số lượng đặt hợp lý (theo khoảng an toàn ' + safeMin + ' - ' + safeMax + ')';
+          else if (sugQty > order) message = 'Nên tăng lên ' + sugQty.toLocaleString() + ' để đạt Min an toàn (' + safeMin + ')';
+          else message = 'Nên giảm còn ' + sugQty.toLocaleString() + ' để không vượt Max an toàn (' + safeMax + ')';
+
+          return { hasData: true, changed, suggestedQty: sugQty, diff: Math.abs(sugQty - order), safeMin, safeMax, source, message };
+        };
+
+        // Lớp hiển thị bên trên getOrderAdvice: quyết định NÊN GHI GÌ trong ô "Gợi Ý Đặt Hàng"
+        // để tránh làm phiền người dùng bằng cảnh báo không cần thiết.
+        //  - Gợi ý = 0 -> chắc chắn không cần đặt thêm -> ghi "Có thể không đặt".
+        //  - Gợi ý > 0 nhưng nhỏ hơn Tồn hiện có -> thường là chưa cấp bách, NHƯNG nếu gợi ý vẫn còn
+        //    đáng kể so với nhu cầu theo Max-Min Cũ (>= 1/3 số cần đặt để đạt Max Cũ) thì vẫn giữ và
+        //    hiển thị bình thường ("vẫn đặt"), chỉ khi nhỏ hơn ngưỡng đó mới coi là không đáng đặt.
+        //  - Còn lại -> hiển thị số gợi ý bình thường, nút chỉ mang tính THAM KHẢO (người dùng vẫn
+        //    tự xem lại bằng mắt thường trước khi quyết định, không phải lệnh bắt buộc).
+        const getOrderDisplay = (item) => {
+          const advice = getOrderAdvice(item);
+          if (!advice.hasData) return { kind: 'nodata', suggestedQty: 0, message: advice.message };
+          if (!advice.changed) return { kind: 'ok', suggestedQty: advice.suggestedQty, message: advice.message };
+
+          const stock = item.stock || 0;
+          const sugQty = advice.suggestedQty;
+
+          if (sugQty === 0) {
+            return { kind: 'suppressed', suggestedQty: 0, message: 'Tồn hiện tại đã đủ theo khoảng an toàn, có thể không cần đặt thêm' };
+          }
+
+          if (sugQty < stock) {
+            const oldNeed = Math.max(0, (item.originalMax || 0) - stock); // SL cần đặt để đạt Max Cũ
+            const threshold = oldNeed / 3;
+            if (sugQty < threshold) {
+              return { kind: 'suppressed', suggestedQty: sugQty, message: 'Gợi ý ' + sugQty.toLocaleString() + ' thấp hơn Tồn hiện có và dưới 1/3 nhu cầu theo Max Cũ, có thể không cần đặt thêm' };
+            }
+          }
+
+          return { kind: 'suggest', suggestedQty: sugQty, message: advice.message };
+        };
+
+        const applySuggestedOrderQty = (item) => {
+          item.actualOrder = getOrderAdvice(item).suggestedQty;
         };
 
         const currentActiveBase = computed(() => {
@@ -1372,7 +1539,7 @@
         const safeCount = computed(() => currentActiveBase.value.filter(i => i.stock > i.min && i.stock <= i.max).length);
         const overMaxCount = computed(() => currentActiveBase.value.filter(i => i.stock > i.max).length);
         const orderList = computed(() => currentActiveBase.value.filter(i => (i.actualOrder || 0) > 0));
-        const orderOverMaxCount = computed(() => currentActiveBase.value.filter(i => getOverMaxAdvice(i)).length);
+        const orderOverMaxCount = computed(() => currentActiveBase.value.filter(i => getOrderDisplay(i).kind === 'suggest').length);
 
         const totalOrderQty = computed(() => filteredItems.value.reduce((s, i) => s + (i.actualOrder || 0), 0));
         const totalEstimatedCost = computed(() => filteredItems.value.reduce((s, i) => s + (i.actualOrder || 0) * (i.costPrice || 0), 0));
@@ -1392,6 +1559,8 @@
             'Max': i.max,
             'TB Tuần': Number(i.weeklyDemand.toFixed(1)),
             'SL Đặt Thực Tế': i.actualOrder,
+            'Gợi ý đặt hàng': getOrderDisplay(i).kind === 'nodata' ? '' : getOrderDisplay(i).suggestedQty,
+            'Ghi chú gợi ý': getOrderDisplay(i).kind === 'suppressed' ? 'Có thể không đặt - ' + getOrderDisplay(i).message : getOrderDisplay(i).message,
             'Giá vốn': i.costPrice,
             'Thành tiền': (i.actualOrder || 0) * (i.costPrice || 0)
           }));
@@ -1426,10 +1595,11 @@
         return {
           items, meta, searchQuery, hasSearch, selectedNcc, activeKpiFilter, bufferMultiplier, roundByPack, excludeZeroMonths,
           currentPage, totalPages, pagedItems, supplierList, filteredItems, totalActiveCount, underMinCount, safeCount, overMaxCount, orderList, orderOverMaxCount,
+          sortKey, sortDir, toggleSort, sortIconClass, sortedItems, getOrderDisplay,
           totalOrderQty, totalEstimatedCost, currentNccOrderCount,
           onFileInputChange, closeOrderFile, loadSampleData, toggleKpiFilter, getKpiLabel, recalculateAll, applyNewMinMax, revertMinMax,
           exportMinMaxComparisonExcel, exportCurrentFilteredOrder,
-          getStockTextColor, getStockStatusText, getProgressBarColor, getStockPercentage, getDaysLeftClass, formatCurrency, getOverMaxAdvice,
+          getStockTextColor, getStockStatusText, getProgressBarColor, getStockPercentage, getDaysLeftClass, formatCurrency, getOrderAdvice, applySuggestedOrderQty,
           confirmClearCoreDB,
           isSyncing, syncStatusText, syncMessage, showGithubConfig, githubBaseUrl, saveGithubConfig, forceSyncGithub, syncErrors, coreFileCount
         };
