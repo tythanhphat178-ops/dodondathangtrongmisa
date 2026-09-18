@@ -431,12 +431,27 @@
   // biệt đúng hãng, dễ khớp nhầm sang hãng khác dù tên/cỡ na ná nhau - đúng lỗi mà cơ chế
   // brandScore này sinh ra để ngăn (xem chú thích "Bugi NGK bị gán sang mặt hàng của hãng
   // SYM" ở matchMisaItem). Bổ sung 4 hãng lốp đã xác nhận thực tế trên 2 hóa đơn trên.
+  // [v51 - Bugfix khớp nhầm SANG HÃNG LỐP KHÁC không có trong danh sách, VD hóa đơn NCC Khang
+  // Mỹ Phát dòng "Vỏ Michelin 130/70-17 62S PILOT STREET 2R TL" bị khớp NHẦM sang mã kho MISA
+  // "Vỏ 130/70-17 Euromina Highway 71P TL CA134M" (giá 433.783đ, lệch tới 65% so với giá hóa
+  // đơn 1.266.740,75đ) - hoàn toàn khác hãng (Michelin ≠ Euromina), chỉ trùng cỡ lốp. Nguyên
+  // nhân: "euromina" (và nhiều hãng lốp/NCC khác đã xác nhận có thật trong chính danh mục MISA
+  // của khách hàng: Dunlop, Camel, Fireking, Dragon, IRC, Yoko/Yokohama) đều KHÔNG có trong
+  // KNOWN_BRANDS, khiến detectBrandKeyword() trả về '' (không xác định được hãng) cho các mã
+  // kho này - theo đúng thiết kế "itemBrand rỗng: không cộng/không trừ điểm" ở brandScore, mã
+  // Euromina này không hề bị phạt -3000 như đáng lẽ phải có khi khác hãng Michelin, mà được
+  // tính điểm hãng = 0 (trung lập) y hệt như "không xác định được hãng thật" - cho phép nó vượt
+  // qua ngưỡng chấp nhận tối thiểu dù là kết quả sai hoàn toàn. Bổ sung các hãng lốp cạnh tranh
+  // này (dò được bằng cách thống kê từ xuất hiện ngay sau cỡ lốp trên toàn bộ danh mục MISA
+  // thật của khách hàng) để brandScore hoạt động đúng thiết kế: phạt nặng khi hãng hóa đơn và
+  // hãng mã kho xác định được nhưng KHÁC NHAU.
   const KNOWN_BRANDS = [
     'honda', 'yamaha', 'suzuki', 'sym', 'piaggio', 'vespa', 'kymco', 'kawasaki',
     'ktm', 'ducati', 'daelim', 'peugeot', 'brixton', 'vinfast',
     'ngk', 'denso', 'bosch', 'nok', 'koyo', 'nsk', 'ntn', 'fcc', 'exedy',
     'did', 'rk', 'kmc', 'yuasa', 'gs', 'castrol', 'motul', 'caltex', 'havoline',
-    'michelin', 'maxxis', 'chengshin', 'kenda'
+    'michelin', 'maxxis', 'chengshin', 'kenda',
+    'euromina', 'dunlop', 'camel', 'fireking', 'dragon', 'irc', 'yoko'
   ];
 
   // [Bugfix - hãng Chengshin bị 1 số mã trong kho MISA thật ghi sai chính tả thành "Chensing"
@@ -499,9 +514,21 @@
   // cỡ đó KHÁC NHAU, loại thẳng ứng viên này khỏi danh sách xét khớp (không cho vào candidates)
   // - an toàn tuyệt đối vì chỉ áp dụng khi CẢ HAI bên đều CÓ mã cỡ rõ ràng để so sánh, không
   // ảnh hưởng các mặt hàng không phải vỏ/ruột/lốp (vốn không khớp được định dạng này).
+  // [v51 - Bugfix mã cỡ lốp KHÔNG trích được do có KHOẢNG TRẮNG quanh dấu gạch nối, VD hóa đơn
+  // NCC Khang Mỹ Phát in cỡ "60/90 - 17" (có dấu cách trước/sau "-") thay vì "60/90-17" liền
+  // mạch như thường thấy. Regex cũ yêu cầu "-" phải đứng NGAY SÁT 2 nhóm số (không cho phép
+  // khoảng trắng xen giữa), nên với dòng này extractTireSizeToken() trả về null (coi như "không
+  // xác định được cỡ") dù cỡ lốp trong tên hàng hoàn toàn rõ ràng. Hậu quả NGHIÊM TRỌNG: cơ chế
+  // an toàn "loại thẳng ứng viên khác cỡ" ở matchMisaItemWithInfo() phía dưới bị TẮT HOÀN TOÀN
+  // cho dòng hàng này (chỉ kích hoạt khi invSizeToken có giá trị) - để lọt vào danh sách ứng
+  // viên hàng loạt mã Michelin cỡ khác hẳn (2.50-17, 70/90-14, 80/90-14...) mà lẽ ra phải bị
+  // loại ngay từ đầu, khiến việc chọn ứng viên đúng phải trông cậy hoàn toàn vào điểm tên/giá
+  // (rủi ro cao hơn). Cho phép khoảng trắng tùy ý quanh CẢ dấu "."/"/" lẫn dấu "-" để bắt được
+  // biến thể ghi cách này, không ảnh hưởng các trường hợp ghi liền mạch cũ (khoảng trắng ở đây
+  // là tùy chọn \s*, khớp cả khi = 0 ký tự).
   function extractTireSizeToken(text) {
     if (!text) return null;
-    let m = String(text).match(/(\d{1,3})[.\/](\d{1,3})-(\d{1,3})/);
+    let m = String(text).match(/(\d{1,3})\s*[.\/]\s*(\d{1,3})\s*-\s*(\d{1,3})/);
     return m ? (m[1] + '-' + m[2] + '-' + m[3]) : null;
   }
 
@@ -3164,8 +3191,42 @@
         // 1 dòng ghi chú dài (VD khuyến mãi/chiết khấu) chỉ trùng ngẫu nhiên 2/12 từ với
         // tên 1 mặt hàng bất kỳ trong kho rồi vẫn bị coi là "khớp".
         let matchRatio = matchCount / invKeywords.length;
+        // [v51 - Bugfix khớp NHẦM SANG MODEL LỐP KHÁC cùng hãng+cùng cỡ, VD hóa đơn NCC Khang
+        // Mỹ Phát "Vỏ Xe Michelin 2.25-17 38P REINF M35 TT" (giá 383.833,333đ) bị khớp vào mã
+        // kho MISA "Vỏ 225-17 38P Michelin City Extra xài ruột" (Diễn giải "...REINF CITY EXTRA
+        // TT", giá 342.092,59đ, lệch 12.2%) - đây là 2 SẢN PHẨM KHÁC HẲN (model "M35 TT" # model
+        // "City Extra TT"), chỉ tình cờ trùng hãng (Michelin) VÀ trùng cỡ (2.25-17), nhưng do
+        // catalog MISA của khách hàng KHÔNG CÓ SẴN mã "M35 TT" cỡ này, ngưỡng chung >=34% (vốn
+        // thiết kế cho hàng thường, không phải vỏ/lốp) vẫn cho qua vì "vỏ", "michelin", "38p",
+        // "reinf", "tt" trùng nhau tới 78% dù từ định danh model quan trọng nhất ("m35") hoàn
+        // toàn không xuất hiện ở mã kho. Với vỏ/ruột/lốp (đã xác định được invSizeToken - xem
+        // extractTireSizeToken), tên model (Pilot Street/Pilot Moto GP/City Extra/M35...) mới là
+        // yếu tố phân biệt SẢN PHẨM quan trọng thứ 2 sau cỡ.
+        //
+        // Ban đầu đòi hỏi matchRatio=100% cho MỌI ứng viên vỏ/lốp ở tầng này, nhưng cách đó lại
+        // đánh sập 1 ca ĐÃ ĐƯỢC XÁC NHẬN ĐÚNG trước đó (chú thích hãng "Chensing"/"Piaggio" phía
+        // trên): hóa đơn NCC Mai Thảo "Lốp Chengshin 120/70-12 WGV 58L TL" khớp ĐÚNG với mã
+        // A.8696 "Vỏ 120/70-12 Chensing CS-W1 58L TL (...)" dù chỉ trùng 5/8 từ khóa (62.5%) - do
+        // hóa đơn gõ "Chengshin"/"WGV" còn mã kho ghi "Chensing"/"CS-W1" (2 cách viết tắt khác
+        // nhau của cùng 1 model thật) - CHƯA kể tới alias hãng (BRAND_ALIASES chỉ áp dụng cho
+        // detectBrandKeyword(), không áp dụng cho vòng so khớp từ khóa ở đây). Điểm phân biệt
+        // đáng tin cậy giữa 2 ca (phải từ chối ca "M35 TT" nhưng phải NHẬN ca "WGV/CS-W1"): ca
+        // "WGV/CS-W1" có GIÁ KHỚP TUYỆT ĐỐI (lệch <1đ) với mã kho - 1 sự trùng hợp gần như không
+        // thể xảy ra ngẫu nhiên giữa 2 sản phẩm khác nhau thật sự, đủ để bù đắp cho phần tên
+        // không khớp trọn vẹn (khác biệt do viết tắt/lỗi chính tả, không phải khác sản phẩm) -
+        // còn ca "M35 TT" giá lệch tới 12.2%, không có tín hiệu giá nào bù đắp cho model bị thiếu.
+        // Quy tắc cuối: với vỏ/lốp, CHỈ chấp nhận tầng khớp từ khóa gần đúng này khi HOẶC (a) khớp
+        // trọn vẹn 100% từ khóa (không thiếu từ nào), HOẶC (b) giá khớp gần như tuyệt đối (lệch
+        // <1đ) làm bằng chứng độc lập bù đắp cho phần tên chưa khớp hết - nếu thiếu CẢ HAI, không
+        // đủ tin cậy để chấp nhận (trả về không tìm thấy mã, hiển thị "cần tạo mã mới" thay vì
+        // khớp liều mã gần đúng nhất hiện có). Hàng hóa khác (invSizeToken rỗng) giữ nguyên ngưỡng
+        // cũ >=34%, không có gì thay đổi.
         if (matchCount >= 2 && matchRatio >= 0.34) {
-          nameScore = matchRatio * 500;
+          let priceDiffGuard = (targetPrice > 0 && itemPrice > 0) ? Math.abs(itemPrice - targetPrice) : Infinity;
+          let priceIsExactGuard = priceDiffGuard < 1;
+          if (!invSizeToken || matchRatio >= 0.999 || priceIsExactGuard) {
+            nameScore = matchRatio * 500;
+          }
         }
       }
 
@@ -3248,9 +3309,44 @@
         if (b.totalScore !== a.totalScore) {
           return b.totalScore - a.totalScore;
         }
+        // [v51 - Bugfix hòa điểm tuyệt đối bị phân định SAI bởi giá trùng NGẪU NHIÊN, VD hóa
+        // đơn NCC Khang Mỹ Phát "Vỏ Michelin 60/90 - 17 M/C 36S REINF CITY EXTRA TL" (giá
+        // 408.333,33đ): 2 ứng viên "Vỏ 60/90-17 Michelin Pilot Street 2 TL" (nameScore 350,
+        // priceScore 500 - trùng giá TUYỆT ĐỐI, nhưng SAI model, hàng tồn kho lịch sử trùng giá
+        // thuần túy ngẫu nhiên) và "Vỏ 60/90-17 Michelin City Extra TL" (nameScore 500 - khớp
+        // ĐỦ 100% từ khóa tên hàng đúng model "City Extra" như hóa đơn ghi, priceScore chỉ 350 do
+        // lệch giá 2%) ra TOTALSCORE HÒA TUYỆT ĐỐI (350+500 = 500+350 = 850). Tiêu chí phân định
+        // hòa CŨ (ưu tiên priceDiff nhỏ hơn) chọn nhầm ứng viên có nameScore THẤP HƠN chỉ vì giá
+        // tình cờ khớp tuyệt đối - trong khi nameScore (khớp đúng TÊN/MODEL sản phẩm) là tín hiệu
+        // định danh đáng tin hơn priceScore (giá mua có thể trùng ngẫu nhiên giữa 2 sản phẩm
+        // hoàn toàn khác nhau, nhất là khi cùng hãng/cùng cỡ). Ưu tiên nameScore cao hơn TRƯỚC,
+        // chỉ mới xét tới priceDiff khi CẢ totalScore lẫn nameScore đều hòa tuyệt đối.
+        if (b.nameScore !== a.nameScore) {
+          return b.nameScore - a.nameScore;
+        }
         return a.priceDiff - b.priceDiff;
       });
       let best = candidates[0];
+
+      // [v51 - Bugfix khớp NHẦM SANG HÃNG KHÁC khi đây là ứng viên DUY NHẤT (hoặc tốt nhất) còn
+      // lại sau khi lọc cỡ lốp, VD hóa đơn NCC Khang Mỹ Phát "Vỏ Michelin 130/70-17 62S PILOT
+      // STREET 2R TL" chỉ còn đúng 1 ứng viên cùng cỡ trong kho là "Vỏ 130/70-17 Euromina
+      // Highway 71P TL CA134M" (khác hãng hoàn toàn). brandScore đã phạt -3000 điểm cho trường
+      // hợp này (xem phía trên), nhưng vì đó là ứng viên DUY NHẤT lọt qua bộ lọc cỡ, nó vẫn
+      // "thắng" với tư cách candidates[0] bất kể totalScore âm ra sao - ngưỡng chấp nhận
+      // MIN_NAME_SCORE_TO_ACCEPT phía dưới CHỈ xét nameScore (không xét totalScore/brandScore),
+      // nên vẫn cho qua và trả về 1 kết quả SAI HÃNG. Đúng theo yêu cầu "mã nào không chắc chắn
+      // đúng thì báo cần tạo mã mới, không tự ý chọn đại" - khi hãng hóa đơn (invBrand) đã xác
+      // định được RÕ RÀNG và hãng của ứng viên tốt nhất cũng xác định được nhưng KHÁC hãng hóa
+      // đơn, loại bỏ HẲN kết quả này (trả về null) thay vì trả về 1 mã chắc chắn sai hãng - để
+      // giao diện hiển thị "chưa có mã, cần tạo mới" thay vì 1 con số so sánh giá vô nghĩa.
+      if (invBrand) {
+        let bestItemBrand = itemBrandOf(best.item);
+        if (bestItemBrand && bestItemBrand !== invBrand) {
+          return { item: null, ambiguous: false, alternative: null };
+        }
+      }
+
       // Ngưỡng chấp nhận tối thiểu: điểm TÊN (chưa cộng giá/NCC) phải đạt mức tối thiểu mới
       // được coi là 1 kết quả đáng tin - tránh việc chỉ vì giá trùng ngẫu nhiên (VD 2 dòng
       // cùng ghi giá 0đ) mà "kéo" 1 khớp tên rất yếu vượt qua để bị nhận nhầm là kết quả đúng.
