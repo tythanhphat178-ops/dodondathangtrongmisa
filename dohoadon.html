@@ -409,11 +409,47 @@
     return str;
   }
 
+  // [Bugfix NGHIÊM TRỌNG, ảnh hưởng diện rộng - dấu "*" bao quanh mã màu/model KHÔNG được
+  // chuẩn hóa, khiến rất nhiều cặp tên hàng hóa đơn/kho MISA vốn NỘI DUNG GIỐNG HỆT NHAU bị coi
+  // là "khác nhau" chỉ vì có/không có cặp dấu "*" bao quanh mã. Quy ước ghi "*MÃ MÀU/MODEL*"
+  // (VD "*R263*", "*NHB55P*", "*NH1*") cực kỳ phổ biến trong chính dữ liệu thật của khách hàng:
+  // quét toàn bộ kho MISA thấy 6.396/19.758 mã (32%) có dấu "*" trong Tên/Diễn giải, và quét
+  // hóa đơn PDF thật (NCC Angimex Furious) thấy 561/1.178 dòng hàng (48%) có dấu "*" trong tên.
+  // Trước đây normalizeText() chỉ bỏ các dấu "-_/()[],." mà KHÔNG bỏ "*", nên hóa đơn ghi "Cánh
+  // yếm phải NHB55P" (không có dấu *) không bao giờ khớp TUYỆT ĐỐI được với Diễn giải kho MISA
+  // "Cánh yếm phải *NHB55P*" (có dấu *) dù 2 chuỗi vốn dĩ mô tả CÙNG một sản phẩm - bị rớt xuống
+  // hẳn 2 bậc (từ nameScore 900 "khớp Diễn giải tuyệt đối" xuống tầng khớp từ khóa yếu tối đa
+  // 500 điểm), nhường chỗ cho các mặt hàng KHÁC hẳn thắng chỉ vì giá trùng ngẫu nhiên. Ca thực
+  // tế xác nhận qua đối chiếu hóa đơn/kho thật: hóa đơn "Cánh yếm phải NHB55P" (giá 132.080đ) bị
+  // khớp NHẦM sang mã có Diễn giải "*NHC60P*" (SAI hẳn mã màu, chỉ trùng giá ngẫu nhiên 132.080đ)
+  // trong khi kho MISA có sẵn mã "Cánh yếm phải *NHB55P*" ĐÚNG mã màu (giá 128.270đ, gần đúng
+  // hơn nhiều) nhưng bị bỏ qua chỉ vì lệch nhau đúng 2 ký tự "*". Thêm "*" vào tập ký tự được
+  // coi là dấu phân cách (giống các dấu "-_/()[],." đã xử lý) để 2 chuỗi trên chuẩn hóa về
+  // GIỐNG NHAU tuyệt đối như đúng bản chất - khớp lại đúng tầng nameScore=900/1000 vốn có.
+  // [Bugfix - THIẾU từ đồng nghĩa "lốp"/"vỏ" (cùng nghĩa "vỏ xe", tùy vùng miền/NCC) và "kim
+  // cương"/"3d" (tên gọi thông dụng của gai vỏ mẫu Maxxis "3D"/"MA3D" - gai hình thoi giống viên
+  // kim cương) khiến hàng vỏ/lốp bị rớt ra "KHÔNG TÌM THẤY MÃ" dù kho MISA CÓ SẴN đúng mã. Ca
+  // thực tế (hóa đơn NCC Mai Thảo, số HĐ 1099): "Lốp Maxxis kim cương 80/90-17 MA3D" giá
+  // 341.666,7đ - kho MISA có sẵn mã ĐÚNG TUYỆT ĐỐI A.179 (Tên "Vỏ 80/90-17 Maxxis 3D 44P TL",
+  // Diễn giải "VỎ 80/90-17 MA3D TL MAXXIS", giá 344.444,44đ - lệch chỉ 0,8%) nhưng bị loại thẳng
+  // khỏi tầng khớp từ khóa vì đây là hàng vỏ/lốp (đã xác định invSizeToken "80-90-17") nên áp
+  // dụng ngưỡng NGHIÊM NGẶT của v51 (chỉ chấp nhận khi khớp ĐỦ 100% từ khóa HOẶC giá khớp TUYỆT
+  // ĐỐI <1đ - xem chú thích v51 phía dưới tại nhánh chấm điểm) - trong khi chỉ khớp 5/8 từ khóa
+  // (62,5%) vì thiếu đúng 3 từ "lốp"/"kim"/"cương" (hóa đơn ghi "Lốp...kim cương", mã kho ghi
+  // "Vỏ...3D" - CÙNG NGHĨA, khác chữ) và giá lệch 0,8% (không tuyệt đối) - trượt CẢ HAI điều
+  // kiện, trả về "chưa có mã, cần tạo mới" dù mã đúng đã có sẵn 100%. Đối chiếu toàn bộ danh mục
+  // MISA thật: chính 6 mã anh em cùng dòng Maxxis 3D khác cỡ (A.174, A.175, A.176, A.178, A.185,
+  // A.186) đều tự ghi Diễn giải y hệt định dạng "Lốp Maxxis kim cương ... MA3D" - xác nhận đây là
+  // cách gọi CHÍNH THỨC của chính khách hàng, không phải suy đoán. Thêm 2 cặp từ đồng nghĩa vào
+  // cùng cơ chế đã có (kiếng->kính, khoá->khóa...) để 2 cách gọi quy về 1: sau khi thêm, invKeyword
+  // "lốp" ăn khớp "vỏ" có sẵn trong Tên A.179, và "kim cương" gộp thành "3d" ăn khớp "3d" có sẵn
+  // trong Tên A.179 -> khớp ĐỦ 7/7 từ khóa (100%), qua được ngưỡng nghiêm ngặt của hàng vỏ/lốp.
   function normalizeText(s) {
     if (!s) return '';
     let str = String(s).toLowerCase();
     str = str.replace(/kiếng/g, 'kính').replace(/khoá/g, 'khóa').replace(/dearm/g, 'dream').replace(/sirus/g, 'sirius').replace(/cụm/g, 'bộ');
-    str = str.replace(/[\-_/()\[\],.]+/g, ' ');
+    str = str.replace(/lốp/g, 'vỏ').replace(/kim cương/g, '3d');
+    str = str.replace(/[\-_/()\[\]*,.]+/g, ' ');
     return str.split(/\s+/).filter(Boolean).join(' ');
   }
 
@@ -530,6 +566,182 @@
     if (!text) return null;
     let m = String(text).match(/(\d{1,3})\s*[.\/]\s*(\d{1,3})\s*-\s*(\d{1,3})/);
     return m ? (m[1] + '-' + m[2] + '-' + m[3]) : null;
+  }
+
+  // [Bugfix - khớp NHẦM SANG KÍCH CỠ MM KHÁC khi tên hàng chỉ khác nhau đúng 1 con số kích
+  // thước, VD hóa đơn NCC Angimex Furious "Tem đuôi sau (honda) 60MM" (giá 6.240đ) bị khớp
+  // NHẦM sang mã kho MISA "86101KYZ900ZA" (Tên "Tem đuôi dè sau Fu 125 (65mm)", Diễn giải "Tem
+  // chữ honda 65MM *ALL*", giá CŨNG 6.240đ - trùng giá tuyệt đối) trong khi kho MISA có sẵn mã
+  // ĐÚNG "87110KTL740" (Tên/Diễn giải "Tem đuôi dè sau RS 60mm", giá cũng 6.240đ) - 2 SẢN PHẨM
+  // KHÁC NHAU (cỡ tem 60mm ≠ 65mm, dùng cho 2 dòng xe khác nhau), chỉ tình cờ trùng giá mua
+  // tuyệt đối lẫn tỉ lệ trùng từ khóa (matchRatio 80% cho cả 2, vì "honda"/"60mm" chỉ là 1/5 từ
+  // khóa) - lỗi này KHÔNG bị cảnh báo "khớp mập mờ" vì giá trùng tuyệt đối ở CẢ 2 ứng viên nên
+  // không có khoảng cách điểm nào giữa chúng để kích hoạt cảnh báo, rất nguy hiểm vì sai mã
+  // nhưng nhìn hoàn toàn "bình thường" trên bảng đối soát. Đây là cùng BẢN CHẤT lỗi mà
+  // extractTireSizeToken() ở trên đã xử lý cho vỏ/ruột/lốp (cỡ là yếu tố định danh sản phẩm
+  // quan trọng nhất, quan trọng hơn hẳn các từ mô tả chung chung như "tem"/"đuôi"/"sau"), chỉ
+  // khác định dạng kích cỡ: 1 con số đơn + đơn vị đo "mm" (dùng phổ biến cho tem/mác chữ, kích
+  // thước linh kiện...) thay vì định dạng "rộng/biên dạng-vành" 3 nhóm số của lốp. Áp dụng
+  // đúng nguyên lý đã dùng cho tire size: nếu CẢ 2 bên đều trích được 1 cỡ mm nhưng KHÁC nhau,
+  // loại thẳng ứng viên đó khỏi danh sách xét khớp - an toàn tuyệt đối vì chỉ áp dụng khi CẢ
+  // HAI bên đều CÓ cỡ mm rõ ràng để so sánh, không ảnh hưởng các mặt hàng không ghi cỡ mm.
+  function extractMmSizeToken(text) {
+    if (!text) return null;
+    let m = String(text).match(/(\d+(?:[.,]\d+)?)\s*mm\b/i);
+    return m ? m[1].replace(',', '.') : null;
+  }
+
+  // [Bugfix - mã màu/model viết tắt trong dấu * bị THIẾU TRỌNG SỐ ở tầng chấm điểm từ khóa
+  // (nameScore <= 500), khiến 1 ứng viên khác tình cờ khớp nhiều từ khóa "hời hợt" hơn thắng
+  // điểm dù không cùng mã màu/model. Ca thực tế (hóa đơn NCC Angimex Furious, số HĐ 766, STT22):
+  // "Mark cánh chim trái 70MM *R340" giá 14.560đ - PDF gốc in cột Mã hàng bị CẮT KÝ TỰ (thiếu
+  // chữ "C" và dấu * đóng cuối - đối chiếu toàn bộ danh mục MISA thật, MỌI mã liên quan tới
+  // "Đô 340" đều dùng đúng *R340C*, không có mã "R340" trơn nào) thành "*R340" thay vì đúng
+  // "*R340C*". Kho MISA có mã 86646KYL840ZB, Tên/Diễn giải "Tem cánh chim Fu X 10 ( Bxcon, Fi )
+  // Trắng nền Đỏ Trái 70mm xe Đô 340" - khớp ĐÚNG cả về loại hàng, bên trái, cỡ 70mm, VÀ đúng
+  // dòng xe "Đô 340" (~ R340C), giá cũng khớp tuyệt đối 14.560đ - nhưng vì mã này mô tả dòng xe
+  // bằng tên tiếng Việt "Đô 340" chứ không lặp lại chuỗi "r340" nên tầng khớp từ khóa TÍNH THIẾU
+  // từ "r340" (chỉ khớp 4/6 từ khóa = 333đ). Trong khi đó mã SAI 86202KYL700ZA (Diễn giải "Mark
+  // cánh chim phải 70MM *SS*" - khác bên PHẢI, khác mã màu *SS*) lại tình cờ khớp NHIỀU từ khóa
+  // hời hợt hơn (gồm cả chữ "mark" xuất hiện sẵn trong Diễn giải của nó) = 5/6 từ khóa = 417đ,
+  // cộng thêm priceScore bằng nhau (giá trùng tuyệt đối cả 2 bên = 500đ) khiến tổng điểm mã SAI
+  // (917) vượt mã ĐÚNG (833). Thêm 1 tín hiệu CỘNG điểm mềm riêng cho mã màu/model trong dấu *:
+  // trích TOÀN BỘ token ngay sau MỖI dấu * bên hóa đơn (không chỉ token đầu tiên - xem chú thích
+  // (2) bên dưới), thưởng điểm khi khớp phía kho. CHỈ CỘNG điểm tham khảo (150, cùng độ lớn
+  // brandScore) - KHÔNG dùng làm bộ lọc loại thẳng như invMmToken/invSizeToken, vì nhiều ca khác
+  // (VD "Tem ốp yếm *NHA96P*") kho KHÔNG CÓ SẴN mã đúng màu ở đúng mức giá hóa đơn ghi - loại
+  // thẳng sẽ khiến các ca đó mất hẳn kết quả gần đúng nhất hiện có thay vì chỉ cảnh báo.
+  //
+  // [Bugfix (2) - LẤY TOÀN BỘ token trong dấu *, không chỉ token ĐẦU TIÊN]. Ca thực tế (hóa đơn
+  // NCC Angimex Furious, số HĐ 769, STT58): "Bộ ốp sườn phải *TYPE3* *PB425*" giá 226.720đ - hóa
+  // đơn ghi CÙNG LÚC 2 mã trong dấu * (mã kho MISA "TYPE3" là mã KIỂU DÁNG dùng chung cho nhiều
+  // màu khác nhau, mã "PB425" mới là mã MÀU cụ thể xác định đúng sản phẩm/giá). Bản vá lần đầu
+  // chỉ trích token ĐẦU TIÊN ("TYPE3") làm invCodeToken duy nhất khiến mã ĐÚNG 83505K2CV00ZD
+  // (Diễn giải "Bộ ốp sườn phải *PB425*", giá khớp TUYỆT ĐỐI 226.720đ) không được cộng điểm mã
+  // màu (vì "PB425" ≠ "TYPE3"), trong khi mã SAI 64600K90VQ0ZA (Diễn giải "BỘ ỐP SƯỜN PHẢI
+  // *TYPE3*", giá lệch 5.6% = 240.240đ) lại được cộng đủ 150đ chỉ vì tình cờ khớp đúng token ĐẦU
+  // TIÊN - đủ sức lật ngược 1 bậc giá, khớp SAI. Sửa: trích TẤT CẢ token trong dấu * (không giới
+  // hạn 1 token), coi khớp bất kỳ token nào trong 2 tập hợp là đủ điều kiện cộng điểm - nhờ vậy mã
+  // ĐÚNG "PB425" vẫn được cộng 150đ nhờ khớp đúng token thứ 2 trên hóa đơn.
+  //
+  // [Bugfix (3) - KHÔNG bắt buộc phía KHO phải tự bọc mã trong dấu *]. Ca thực tế (hóa đơn NCC
+  // Angimex Furious, số HĐ 795, STT269): "Nắp trước tay lái *NHB55P*" giá 111.280đ - 2 ứng viên
+  // nameScore/priceScore hòa TUYỆT ĐỐI (desc cả 2 đều trùng invName sau khi chuẩn hoá = 900đ, giá
+  // cả 2 đều lệch ở cùng 1 bậc 100đ), chỉ khác: mã 53205K57A10ZB ghi Diễn giải "Nắp trước tay lái
+  // NHB55P" (đúng chữ, nhưng KHÔNG bọc trong dấu *) còn mã 53205K73V40ZH ghi "NẮP TRƯỚC TAY LÁI
+  // *NHB55P*" (có bọc dấu *). Nếu chỉ so token-trong-dấu-* thì mã KHÔNG có dấu * (dù nội dung mã
+  // giống hệt) bị bỏ sót, không được cộng điểm, khiến 150đ chênh lệch tự ý "lật kèo" 1 thế hòa
+  // tuyệt đối dựa trên 1 khác biệt THUẦN TÚY VỀ ĐỊNH DẠNG (có/không dấu *) chứ không phải khác
+  // biệt về SẢN PHẨM - trong khi giá mã không-dấu-* (133.120đ, lệch 16.4%) thực ra GẦN hóa đơn
+  // hơn hẳn mã có-dấu-* (151.840đ, lệch 26.7%). Sửa: phía KHO không bắt buộc phải có dấu * - chỉ
+  // cần token của hóa đơn xuất hiện dạng 1 TỪ ĐỘC LẬP (word boundary) bất kỳ đâu trong Tên/Diễn
+  // giải của ứng viên là đủ tính khớp, để tín hiệu chỉ phản ánh đúng nội dung mã, không lệ thuộc
+  // định dạng gõ liệu.
+  // [Bugfix - 1 cặp dấu * có thể chứa NHIỀU mã cùng lúc (cách nhau bởi dấu phẩy/khoảng trắng),
+  // không chỉ 1 token duy nhất. Ca thực tế (hóa đơn NCC Angimex Furious, số HĐ 795): "Yên xe
+  // *NHB18M, R350C*" - bản trích token đầu tiên (regex cũ, không có nhóm bắt lặp) chỉ lấy được
+  // "NHB18M", bỏ sót hẳn "R350C" dù nó cũng là 1 mã màu hợp lệ được hóa đơn liệt kê cùng chỗ. Sửa:
+  // với MỖI cặp dấu * (hoặc từ 1 dấu * lẻ tới hết chuỗi nếu bị cắt thiếu dấu đóng - xem chú thích
+  // ca "R340"/"R340C" phía trên), lấy TOÀN BỘ đoạn văn bản bên trong rồi tách thành nhiều token
+  // con theo mọi ký tự phân cách (dấu phẩy, khoảng trắng...), không chỉ dừng ở token đầu tiên.
+  //
+  // [Bugfix - LOẠI BỎ các từ màu sắc/mô tả chất lượng tiếng Việt THÔNG DỤNG khỏi danh sách token
+  // mã hàng]. Ca thực tế (hóa đơn NCC Angimex Furious, số HĐ 788, STT288): "BỘ ỐP YẾM TRÁI *XÁM
+  // CAO CẤP*" giá 204.880đ - hóa đơn này dùng dấu * để bọc 1 CỤM MÔ TẢ tiếng Việt thường ("xám cao
+  // cấp" = màu xám, loại cao cấp) thay vì 1 mã viết tắt cô đọng như thường lệ (R340C, NHB55P...).
+  // Nếu coi "XÁM" là 1 token mã hàng như bình thường, nó sẽ khớp NHẦM vào bất kỳ mã kho nào tình
+  // cờ có chữ "Xám" xuất hiện ở đâu đó trong Tên/Diễn giải (từ "xám" cực kỳ phổ biến, không đặc
+  // trưng cho riêng 1 sản phẩm) - thực tế đã khớp nhầm sang mã 64355K90V60ZA ("Nối bửng...Xám
+  // Đậm NHB83M...", Diễn giải "Bộ ốp TRUNG TÂM bên trái *NHB83*" - KHÁC HẲN loại hàng "ốp YẾM" của
+  // hóa đơn, chỉ trùng ngẫu nhiên đúng từ "Xám" và giá gần đúng 204.879,5đ) thay vì các mã ĐÚNG
+  // loại "BỘ ỐP YẾM TRÁI" có sẵn trong kho cùng giá tuyệt đối 204.880đ (VD *TYPE3*, *TYPE4*,
+  // *TYPE6*, *TYPE1 2*). Với ca này, đúng ra không token nào trong dấu * xác định chắc chắn được
+  // (kho đặt tên biến thể màu bằng "TYPE1-6" chứ không lặp lại "xám" - đây thuộc nhóm ca giống
+  // "Tem ốp yếm *NHA96P*"/"Mark chữ *R340C*" đã ghi chú ở trên: mã màu đúng không có ở đúng mức
+  // giá xác định được qua văn bản hóa đơn) nên KHÔNG NÊN cộng điểm mã màu sai lệch, chỉ nên để
+  // nameScore/priceScore tự quyết định như bình thường. Danh sách loại trừ CHỈ gồm các từ màu cơ
+  // bản + từ mô tả chất lượng chung chung, không ảnh hưởng các mã thật (R340C, NHB55P, TYPE3, SS,
+  // PB425... đều không nằm trong danh sách này).
+  var CODE_TOKEN_STOPWORDS = new Set([
+    'XAM','XÁM','DO','ĐỎ','DEN','ĐEN','TRANG','TRẮNG','XANH','VANG','VÀNG','CAM','TIM','TÍM',
+    'HONG','HỒNG','BAC','BẠC','NAU','NÂU','TRONG','TRẮNG','CAO','CAP','CẤP','LOAI','LOẠI',
+    'CHINH','CHÍNH','HANG','HÃNG','HÃNG','MOI','MỚI','CU','CŨ','ZIN','THUONG','THƯỜNG',
+  ]);
+
+  function extractAllAsteriskCodeTokens(text) {
+    if (!text) return [];
+    let out = [];
+    let re = /\*([^*]*)\*?/g;
+    let m;
+    while ((m = re.exec(String(text))) !== null) {
+      let seg = m[1];
+      if (seg) {
+        let subTokens = seg.split(/[^A-Za-zÀ-ỹ0-9\-]+/).filter(t => t.length >= 2);
+        for (let t of subTokens) {
+          let up = t.toUpperCase();
+          if (!CODE_TOKEN_STOPWORDS.has(up)) out.push(up);
+        }
+      }
+      if (re.lastIndex === m.index) re.lastIndex++; // an toàn, tránh vòng lặp vô hạn nếu match rỗng
+    }
+    return out;
+  }
+
+  function codeTokenAppearsIn(token, text) {
+    if (!token || !text) return false;
+    let re = new RegExp('(?:^|[^A-Za-zÀ-ỹ0-9])' + token + '(?:$|[^A-Za-zÀ-ỹ0-9])', 'i');
+    return re.test(String(text));
+  }
+
+  // [Bugfix - hàng có Trái/Phải (bên trái/bên phải xe, VD tem/mác dán 2 bên đối xứng) là 2 SẢN
+  // PHẨM VẬT LÝ KHÁC NHAU DÙNG 2 MÃ KHÁC NHAU - không thể lẫn lộn dù mọi thông số khác (loại
+  // hàng, cỡ, giá, mã màu) đều giống hệt nhau. Ca thực tế phát hiện SAU KHI đã vá lỗi mã màu
+  // trong dấu * (extractAsteriskCodeToken() phía trên): hóa đơn NCC Angimex Furious, số HĐ 766,
+  // STT22 "Mark cánh chim TRÁI 70MM *R340" giá 14.560đ - sau khi vá đúng mã màu R340, kết quả lại
+  // nhảy sang mã 86645KYL840ZB (Diễn giải "Mark cánh chim PHẢI 70MM *R340", giá cũng 14.560đ) tức
+  // ĐÚNG mã màu nhưng SAI BÊN, vì mã 86646KYL840ZB (mã ĐÚNG - đúng cả bên Trái lẫn mã màu R340)
+  // lại bị lỗi dữ liệu MISA khiến cột Diễn giải của riêng mã này bị COPY NGUYÊN VĂN cột Tên hàng
+  // thay vì ghi đúng định dạng "Mark cánh chim trái 70MM *R340" như 2 mã anh em cùng dòng
+  // (86646KYL840ZA/ZC) - khiến điểm khớp từ khóa/mã màu của nó thấp hơn hẳn mã 86645KYL840ZB (có
+  // Diễn giải đúng chuẩn, khớp gần như y hệt định dạng hóa đơn chỉ khác đúng 1 từ "trái"/"phải").
+  // Đây là lỗi định danh SẢN PHẨM nghiêm trọng (giao nhầm hàng bên phải cho khách cần hàng bên
+  // trái) nên áp dụng đúng nguyên lý đã dùng cho cỡ vỏ/lốp/mm: loại thẳng ứng viên nếu XÁC ĐỊNH
+  // được cả 2 bên (hóa đơn và ứng viên) đều có từ "trái"/"phải" rõ ràng nhưng KHÁC nhau - đặt
+  // TRƯỚC mọi nhánh chấm điểm tên, không có đường vòng nào lọt qua.
+  function extractSideToken(text) {
+    if (!text) return null;
+    let s = String(text).toLowerCase();
+    let hasTrai = /\btrái\b/.test(s);
+    let hasPhai = /\bphải\b/.test(s);
+    if (hasTrai && !hasPhai) return 'trai';
+    if (hasPhai && !hasTrai) return 'phai';
+    return null; // cả 2 từ cùng xuất hiện, hoặc không từ nào: không đủ rõ ràng để dùng loại trừ
+  }
+
+  // [Bugfix - CẢNH BÁO khi độ nhớt nhớt/dầu máy trên hóa đơn KHÔNG khớp mã đang chọn]. Ca thực
+  // tế (hóa đơn NCC Mai Thảo, số HĐ 1088/1129): "Dầu Yamalube-4T SJ 20W-40 MA 800ML" giá
+  // 73.148,15đ bị khớp ÂM THẦM (không cảnh báo gì) vào mã 90793-AV912 (Diễn giải "Dầu Yamalube
+  // 4T SL 10W40 MA 800ML" - giá khớp tuyệt đối 73.148,15đ, NHƯNG độ nhớt SAI HẲN: hóa đơn ghi
+  // "20W-40", mã kho lại là "10W40" - 2 cấp độ nhớt khác nhau, không phải lỗi chính tả) trong khi
+  // kho MISA có sẵn mã 90793-AV915 (Diễn giải "Dầu Yamalube-4T SJ 20W-40 MA 1L" - ĐÚNG cấp nhớt
+  // "20W-40" y hệt hóa đơn, nhưng khác dung tích 1L thay vì 800ML nên giá lệch hẳn 75.000đ). Đây
+  // là ca GIỐNG HỆT bản chất lỗi mã màu/model trong dấu * đã vá (extractAllAsteriskCodeTokens())
+  // - kho có 2 mã bị "chéo" thông số (đúng dung tích thì sai độ nhớt, đúng độ nhớt thì sai dung
+  // tích) - KHÔNG có mã nào trong kho vừa đúng dung tích vừa đúng độ nhớt hóa đơn ghi, nên KHÔNG
+  // thể tự động chọn lại (giống hệt tình huống "Tem ốp yếm *NHA96P*"/"Mark chữ *R340C*" đã ghi
+  // chú ở trên) - nhưng khác 2 ca đó, độ nhớt không được hóa đơn bọc trong dấu * nên cơ chế cảnh
+  // báo mã màu hiện có (dựa vào invCodeTokens/extractAllAsteriskCodeTokens) không bắt được. Thêm
+  // 1 lớp CẢNH BÁO RIÊNG (KHÔNG ảnh hưởng gì tới việc CHỌN mã - chỉ thêm cảnh báo sau khi đã chọn
+  // xong, an toàn tuyệt đối, không có rủi ro đổi kết quả khớp ở bất kỳ hóa đơn nào khác) dành
+  // riêng cho định dạng cấp độ nhớt chuẩn quốc tế "số+W+số" (VD 10W40, 20W-40, 15W50...) - định
+  // dạng RẤT đặc trưng, không thể khớp nhầm ngẫu nhiên với văn bản khác.
+  function extractViscosityTokens(text) {
+    if (!text) return [];
+    let out = [];
+    let re = /\b(\d{1,2})\s*w\s*-?\s*(\d{2})\b/gi;
+    let m;
+    while ((m = re.exec(String(text))) !== null) out.push(m[1] + 'W' + m[2]);
+    return out;
   }
 
   // --- 1. INDEXED DB TỰ ĐỘNG KHÔI PHỤC DỮ LIỆU TỪ MỌI PHIÊN BẢN CŨ ---
@@ -1231,8 +1443,20 @@
   // tải hàng loạt, ví dụ: "..._C26TMV_00004200_28042026_congtytnhh....pdf"
   //   -> soHD = 00004200 (số hóa đơn), ngay = 28042026 (ddMMyyyy)
   // Nếu tên file không theo quy ước này thì trả về null, khi đó sẽ dùng thẳng tên file làm nhãn.
+  // [Bugfix - NCC Angimex Furious không đệm số 0 cho số hóa đơn trong tên file, VD
+  // "..._C26TKD_763_07092026_congtytnhhangimexfurious.pdf" (soHD chỉ có 3 chữ số "763",
+  // không phải 8 chữ số đệm "00000763" như quy ước MISA meInvoice điển hình mà regex cũ giả
+  // định - "_(\d{5,10})_..." đòi hỏi tối thiểu 5 chữ số). Hậu quả: hàm trả về null cho các
+  // hóa đơn NCC này, khiến app hiển thị nguyên tên file dài thay vì nhãn gọn "HĐ số 763 -
+  // 07/09/2026" - chỉ ảnh hưởng hiển thị, không ảnh hưởng độ chính xác đối soát, nhưng vẫn
+  // nên sửa vì nhãn gọn giúp phân biệt các hóa đơn khi gộp nhiều file. Nới tối thiểu số chữ số
+  // của soHD xuống 1 (thay vì 5) - vẫn AN TOÀN vì mốc phân định thật sự đáng tin cậy là nhóm
+  // NGAY SAU nó luôn phải đúng 8 chữ số (ngày dạng ddMMyyyy, "\d{8}") kẹp giữa 2 dấu "_" - độ
+  // dài cố định 8 chữ số đó đủ để tránh khớp nhầm sang các cụm số khác trong tên file (VD mã
+  // số thuế người bán 10 chữ số đứng trước, hay số thứ tự "_1_" ngay sau nó) vì chúng không
+  // đứng ngay trước 1 nhóm ĐÚNG 8 chữ số kẹp giữa 2 dấu gạch dưới như vậy.
   function extractInvoiceMetaFromFilename(name) {
-    let m = String(name || '').match(/_(\d{5,10})_(\d{8})_/);
+    let m = String(name || '').match(/_(\d{1,10})_(\d{8})_/);
     if (!m) return null;
     let soHD = m[1].replace(/^0+(?=\d)/, '');
     let dateStr = m[2];
@@ -3025,14 +3249,30 @@
           let rowBrand = nccIdx !== -1 ? detectBrandKeyword(String(r[nccIdx] || '')) : '';
           if (!rowBrand) rowBrand = detectBrandKeyword(rawName);
 
+          // [Bugfix NGHIÊM TRỌNG - cùng gốc rễ với lỗi đã vá ở extractMasterItemsFromWorkbook()
+          // (xem chú thích đầy đủ tại parseVNNumber() phía trên) nhưng bị SÓT ở chính hàm đọc
+          // hóa đơn Excel này: trước đây dùng thẳng Number(r[priceIdx])/Number(r[qtyIdx]), không
+          // qua parseVNNumber(). Nếu ô Đơn giá/Số lượng trong file Excel hóa đơn của NCC là
+          // CHUỖI VĂN BẢN định dạng số Việt Nam (dấu chấm ngăn nghìn, dấu phẩy thập phân, VD
+          // "336.960,33") - hoàn toàn có thể xảy ra khi NCC xuất file từ phần mềm kế toán khác,
+          // hoặc file .xlsx thực chất được đổi tên từ .csv - Number("336.960,33") trả về NaN,
+          // bị "|| 0" / "|| 1" nuốt câm thành Đơn giá=0đ hoặc Số lượng=1 mà KHÔNG có cảnh báo
+          // nào, làm cả dòng hàng biến mất khỏi các cột thống kê tăng/giảm giá hoặc bị tính SAI
+          // hẳn số lượng thực nhận. parseVNNumber() (đã dùng nhất quán ở nơi đọc danh mục MISA,
+          // và XML/PDF cũng tự xử lý riêng định dạng số VN) vừa nhận đúng chuỗi định dạng VN,
+          // vừa vẫn nhận đúng khi ô Excel là SỐ THẬT sẵn (trường hợp phổ biến nhất) - không đổi
+          // hành vi cho các file đã hoạt động đúng trước đây, chỉ thêm 1 lớp an toàn.
+          let parsedQty = (qtyIdx !== -1 ? parseVNNumber(r[qtyIdx]) : 0) || 1;
+          let parsedPrice = priceIdx !== -1 ? parseVNNumber(r[priceIdx]) : 0;
+
           parsed.push({
             stt: parsed.length + 1,
             rawName: rawName,
             invCode: finalCode,
             invName: splitRes.name,
             unit: unitIdx !== -1 ? String(r[unitIdx] || '') : '',
-            qty: qtyIdx !== -1 ? Number(r[qtyIdx]) || 1 : 1,
-            price: priceIdx !== -1 ? Number(r[priceIdx]) || 0 : 0,
+            qty: parsedQty,
+            price: parsedPrice,
             vat: vatIdx !== -1 ? normalizeVatValue(r[vatIdx]) : sheetVat,
             invBrand: rowBrand
           });
@@ -3083,6 +3323,31 @@
     // extractTireSizeToken() phía trên. Dò cả invName lẫn rawName (2 dòng thường giống hệt
     // nhau với hàng vỏ/lốp vì không tách được Mã hàng riêng).
     let invSizeToken = extractTireSizeToken(invName) || extractTireSizeToken(rawName);
+
+    // Cỡ mm của dòng hàng đang xét (nếu có) - xem chú thích bugfix tại extractMmSizeToken()
+    // phía trên (ca thực tế "Tem đuôi sau (honda) 60MM" bị khớp nhầm sang mã 65mm).
+    let invMmToken = extractMmSizeToken(invName) || extractMmSizeToken(rawName);
+
+    // Mã màu/model viết tắt trong dấu * của dòng hàng đang xét (nếu có) - xem chú thích bugfix
+    // chi tiết tại extractAsteriskCodeToken() phía trên (ca thực tế "Mark cánh chim *R340" bị
+    // khớp nhầm sang mã *SS* thay vì mã đúng cùng dòng xe "Đô 340").
+    let invCodeTokens = Array.from(new Set([
+      ...extractAllAsteriskCodeTokens(invName),
+      ...extractAllAsteriskCodeTokens(rawName)
+    ]));
+
+    // Cấp độ nhớt (nhớt/dầu máy) của dòng hàng đang xét (nếu có) - xem chú thích bugfix chi
+    // tiết tại extractViscosityTokens() phía trên. CHỈ dùng để cảnh báo sau khi đã chọn mã
+    // xong, KHÔNG đưa vào vòng chấm điểm/chọn ứng viên (an toàn tuyệt đối với mọi hóa đơn khác).
+    let invViscTokens = Array.from(new Set([
+      ...extractViscosityTokens(invName),
+      ...extractViscosityTokens(rawName)
+    ]));
+
+    // Bên trái/phải của dòng hàng đang xét (nếu có) - xem chú thích bugfix chi tiết tại
+    // extractSideToken() phía trên (ca thực tế "Mark cánh chim Trái *R340" bị khớp nhầm sang mã
+    // bên Phải cùng mã màu chỉ vì Diễn giải của mã Trái đúng bị lỗi dữ liệu MISA).
+    let invSideToken = extractSideToken(invName) || extractSideToken(rawName);
 
     // Hàm phụ: xác định hãng của 1 mặt hàng trong kho MISA (dò trong Tên hàng + Diễn giải + Mã)
     const itemBrandOf = (item) => detectBrandKeyword((item.name || '') + ' ' + (item.desc || '') + ' ' + (item.code || ''));
@@ -3149,6 +3414,49 @@
       if (invSizeToken) {
         let itemSizeToken = extractTireSizeToken(item.name) || extractTireSizeToken(item.desc);
         if (itemSizeToken && itemSizeToken !== invSizeToken) continue;
+      }
+
+      // Cùng nguyên lý như trên, áp dụng cho cỡ mm (tem/mác chữ, kích thước linh kiện...) - xem
+      // chú thích bugfix chi tiết tại extractMmSizeToken() phía trên.
+      // [Bugfix - KHÁC với vỏ/lốp (chỉ có ĐÚNG 1 cỡ thật, Tên và Diễn giải luôn phải khớp
+      // nhau), một số phụ tùng dạng ốc vít/bù lon (Tán, Đai ốc...) có THỂ có 2 cách ghi kích
+      // thước khác nhau ở Tên và Diễn giải của CHÍNH mã đó (VD cỡ ren khác cỡ đầu vặn/đường
+      // kính ngoài). Ca thực tế: mã "90202KN7670" Tên "Tán Bu Li Nồi Sau 28mm zin" nhưng Diễn
+      // giải lại ghi "90202KN7670-Đai ốc 30MM" - CÙNG 1 mã, giá khớp gần như tuyệt đối với hóa
+      // đơn (lệch <1đ) nên gần như chắc chắn ĐÚNG mã, nhưng nếu chỉ lấy cỡ mm đầu tiên tìm thấy
+      // (ưu tiên Tên "28mm") rồi loại thẳng khi khác invMmToken "30mm" (như bản vá lần đầu), mã
+      // ĐÚNG này bị loại oan chỉ vì bản thân dữ liệu kho có 2 con số mm khác nhau cho 2 khía
+      // cạnh khác nhau của cùng 1 sản phẩm. Sửa: chỉ loại ứng viên khi CẢ Tên lẫn Diễn giải đều
+      // có cỡ mm trích được nhưng KHÔNG cỡ nào trong 2 cỡ đó khớp invMmToken (an toàn hơn - vẫn
+      // chặn được ca "Tem 60mm/65mm" gốc vì Tên và Diễn giải của mã sai đó đồng nhất cùng ghi
+      // 65mm, không có cỡ nào trùng invMmToken "60mm").
+      if (invMmToken) {
+        let itemMmTokenName = extractMmSizeToken(item.name);
+        let itemMmTokenDesc = extractMmSizeToken(item.desc);
+        let hasAnyMmToken = itemMmTokenName || itemMmTokenDesc;
+        let matchesEither = (itemMmTokenName === invMmToken) || (itemMmTokenDesc === invMmToken);
+        if (hasAnyMmToken && !matchesEither) continue;
+      }
+
+      // Loại thẳng ứng viên nếu XÁC ĐỊNH được rõ ràng bên Trái/Phải ở cả 2 phía nhưng KHÁC
+      // nhau - xem chú thích bugfix chi tiết tại extractSideToken() phía trên.
+      // [Bugfix - dùng "MỘT TRONG 2 trường Tên/Diễn giải khớp là đủ" (giống hệt nguyên lý đã
+      // sửa cho invMmToken), KHÔNG lấy trường Tên làm ưu tiên tuyệt đối rồi bỏ qua Diễn giải.
+      // Ca thực tế (hóa đơn NCC Angimex Furious, số HĐ 763, STT53): "BỘ ỐP TRUNG TÂM PHẢI
+      // *TYPE1*" giá 139.360đ - mã ĐÚNG 64350K90VS0ZD có Diễn giải khớp Y HỆT hóa đơn (kể cả mã
+      // *TYPE1*, giá tuyệt đối) nhưng CHÍNH cột Tên hàng của mã này lại ghi "...có tem Trái" (rất
+      // có thể do lỗi/kế thừa dữ liệu nhập kho, Diễn giải mới là mô tả đúng/mới nhất). Bản vá đầu
+      // tiên chỉ ưu tiên đọc bên từ Tên trước ("trai"), thấy khác hóa đơn ("phai") nên LOẠI THẲNG
+      // mã ĐÚNG này - dù chính Diễn giải của nó lại khớp đúng "phải". Sửa: chỉ loại khi CẢ Tên lẫn
+      // Diễn giải đều xác định được bên rõ ràng nhưng KHÔNG bên nào khớp hóa đơn (an toàn hơn,
+      // vẫn chặn được ca "cánh chim trái/phải" gốc vì mã sai ở ca đó có CẢ Tên lẫn Diễn giải cùng
+      // thống nhất ghi "phải", không có trường nào khớp "trái" của hóa đơn).
+      if (invSideToken) {
+        let itemSideName = extractSideToken(item.name);
+        let itemSideDesc = extractSideToken(item.desc);
+        let hasAnySideToken = itemSideName || itemSideDesc;
+        let matchesEither = (itemSideName === invSideToken) || (itemSideDesc === invSideToken);
+        if (hasAnySideToken && !matchesEither) continue;
       }
 
       let normItemName = normalizeText(item.name);
@@ -3283,23 +3591,78 @@
           warehouseScore = 80;
         }
 
-        // Điểm NCC: đặt cao hơn hẳn điểm tên + giá cộng lại, để NCC luôn là điều kiện
-        // quyết định trước tiên (đúng hãng nhưng tên/giá kém khớp hơn vẫn được ưu tiên
-        // hơn sai hãng dù tên/giá khớp gần đúng) - khắc phục lỗi khớp nhầm như "Bugi NGK"
-        // bị gán sang mặt hàng của hãng "SYM" trong ảnh minh họa.
+        // Điểm NCC/hãng: phần PHẠT khi sai hãng rõ ràng (-3000) vẫn giữ NẶNG như cũ - đây là
+        // phần khắc phục lỗi khớp nhầm như "Bugi NGK" bị gán sang mặt hàng của hãng "SYM", và
+        // vẫn còn 1 lớp phòng thủ độc lập nữa phía dưới (loại thẳng kết quả nếu ứng viên thắng
+        // cuối cùng có hãng xác định được nhưng khác invBrand) - lớp phòng thủ đó KHÔNG phụ
+        // thuộc độ lớn brandScore nên hạ điểm CỘNG bên dưới không ảnh hưởng tới việc chặn lỗi
+        // NGK/SYM.
+        // [Bugfix NGHIÊM TRỌNG - điểm CỘNG +5000 khi khớp đúng hãng cũ LỚN HƠN CẢ tổng điểm tên
+        // tối đa (1000) + điểm giá tối đa (500) cộng lại, y hệt lỗi warehouseScore=4000 đã vá ở
+        // trên (xem chú thích chi tiết tại đó) - "cùng hãng" biến từ 1 tín hiệu THAM KHẢO mềm
+        // thành ĐIỀU KIỆN QUYẾT ĐỊNH áp đảo, đủ sức đè bẹp 1 ứng viên ĐÚNG có tên+giá khớp tốt
+        // hơn hẳn chỉ vì Diễn giải của nó tình cờ KHÔNG nhắc lại tên hãng (rất phổ biến ở cửa
+        // hàng chủ yếu bán 1 hãng - Diễn giải thường bỏ qua tên hãng vì dư thừa/hiển nhiên, nên
+        // sự có/không của đúng 1 từ "honda" trong text là NHIỄU chứ không phải tín hiệu định
+        // danh sản phẩm). Ca thực tế (hóa đơn NCC Angimex Furious): "Tem đuôi sau (honda) 60MM"
+        // giá 6.240đ - ứng viên ĐÚNG "Tem đuôi dè sau RS 60mm" (giá cũng 6.240đ, cỡ khớp đúng
+        // 60mm) không hề nhắc "honda" trong Tên/Diễn giải nên brandScore=0, trong khi ứng viên
+        // SAI "Tem đuôi dè sau Fu 125 (65mm)" (giá CŨNG 6.240đ nhưng SAI cỡ 65mm) có chữ "honda"
+        // trong Diễn giải nên được +5000 - thắng áp đảo dù cỡ sai, dù ứng viên đúng đã có sẵn.
+        // Lỗi cỡ mm này nay đã được chặn từ gốc bằng invMmToken/extractMmSizeToken() ở trên
+        // (loại thẳng ứng viên 65mm khỏi danh sách xét khớp), nhưng đây vẫn là 1 lớp phòng thủ
+        // thứ 2 cần thiết: NHIỀU ứng viên cùng cỡ/cùng giá vẫn có thể chỉ khác nhau ở việc có
+        // nhắc tên hãng hay không (VD ca tương tự với 2 mã "60mm" khác nhau dùng cho 2 dòng xe
+        // khác nhau, 1 mã có chữ "honda" 1 mã không) - hạ điểm CỘNG xuống mức chỉ đủ phá thế hòa
+        // TUYỆT ĐỐI giữa các ứng viên đã ngang điểm tên+giá (tương xứng với cách warehouseScore
+        // đã được hạ xuống 80 vì cùng lý do), không còn đủ sức lật ngược 1 khoảng cách tên+giá
+        // đáng kể của 1 ứng viên khác hãng-trung-lập (itemBrand rỗng) tốt hơn.
         let brandScore = 0;
         if (invBrand) {
           let itemBrand = itemBrandOf(item);
-          if (itemBrand && itemBrand === invBrand) brandScore = 5000;
+          if (itemBrand && itemBrand === invBrand) brandScore = 150;
           else if (itemBrand && itemBrand !== invBrand) brandScore = -3000; // sai hãng: đẩy xuống cuối
           // itemBrand rỗng (không dò được hãng trong kho): giữ nguyên, không cộng/trừ
         }
 
+        // Điểm mã màu/model trong dấu * - xem chú thích bugfix chi tiết tại
+        // extractAsteriskCodeToken() phía trên. Chỉ CỘNG điểm tham khảo (không loại thẳng như
+        // invMmToken/invSizeToken) vì nhiều ca kho không có sẵn đúng mã ở đúng giá hóa đơn ghi.
+        let codeTokenScore = 0;
+        if (invCodeTokens.length > 0) {
+          let itemCodeTokens = [...extractAllAsteriskCodeTokens(item.name), ...extractAllAsteriskCodeTokens(item.desc)];
+          let hit = false;
+          for (let invTok of invCodeTokens) {
+            // (a) Khớp trực tiếp với 1 token trong dấu * của chính ứng viên (khớp tuyệt đối,
+            // hoặc 1 bên là tiền tố của bên kia đủ dài >=4 ký tự - phòng hóa đơn bị cắt ký tự
+            // cuối như ca "R340"/"R340C").
+            for (let itemTok of itemCodeTokens) {
+              if (itemTok === invTok) { hit = true; break; }
+              if (itemTok.length >= 4 && invTok.length >= 4 && (itemTok.startsWith(invTok) || invTok.startsWith(itemTok))) { hit = true; break; }
+            }
+            if (hit) break;
+            // (b) Token hóa đơn xuất hiện dạng 1 từ độc lập bất kỳ đâu trong Tên/Diễn giải ứng
+            // viên - KHÔNG bắt buộc bản thân ứng viên phải bọc mã trong dấu * (xem chú thích
+            // bugfix (3) phía trên).
+            if (codeTokenAppearsIn(invTok, item.name) || codeTokenAppearsIn(invTok, item.desc)) { hit = true; break; }
+            // (c) Lớp phụ - xem chú thích bugfix tại extractAllAsteriskCodeTokens(): 1 số mã kho
+            // (VD 86646KYL840ZB "...Trái 70mm xe Đô 340") diễn tả mã màu/dòng xe bằng TÊN TIẾNG
+            // VIỆT thường ("Đô 340") thay vì nhắc lại đúng chuỗi "R340"/"R340C". Chỉ cần phần
+            // ĐUÔI SỐ (>=3 chữ số) của token hóa đơn xuất hiện dưới dạng 1 số độc lập (word
+            // boundary, tránh khớp nhầm 1 phần của số khác dài hơn) cũng đủ tính là 1 dấu hiệu
+            // trùng mã màu/dòng xe đáng tin.
+            let digitSuffix = invTok.match(/(\d{3,})$/);
+            if (digitSuffix && (codeTokenAppearsIn(digitSuffix[1], item.name) || codeTokenAppearsIn(digitSuffix[1], item.desc))) { hit = true; break; }
+          }
+          if (hit) codeTokenScore = 150;
+        }
+
         candidates.push({
           item: item,
-          totalScore: brandScore + warehouseScore + nameScore + priceScore,
+          totalScore: brandScore + warehouseScore + nameScore + priceScore + codeTokenScore,
           nameScore: nameScore,
-          priceDiff: priceDiff
+          priceDiff: priceDiff,
+          hasCodeMatch: codeTokenScore > 0
         });
       }
     }
@@ -3377,6 +3740,88 @@
           alternative = runner.item;
         }
       }
+
+      // [Cảnh báo mã màu/model KHÔNG khớp] - độc lập với cảnh báo mập mờ phía trên (vốn CHỈ kích
+      // hoạt khi nameScore đã khá mạnh >=600, không bao giờ áp dụng cho tầng khớp từ khóa yếu
+      // <=500 - chính là tầng chứa 2 ca dưới đây). Ca thực tế: hóa đơn "Tem ốp yếm *NHA96P*" (giá
+      // 10.400đ, HĐ 766 STT21) và "Mark chữ (125FI) *R340C*" (giá 6.240đ, HĐ 786 STT19) - đối
+      // chiếu với TOÀN BỘ danh mục MISA thật, không có mã nào VỪA đúng mã màu VỪA đúng giá hóa đơn
+      // ghi (mã đúng màu tồn tại nhưng giá khác hẳn; mã đúng giá tồn tại nhưng khác màu) - đây là
+      // khoảng trống dữ liệu THẬT của kho (không phải lỗi thuật toán, không có "đáp án đúng" nào
+      // để thuật toán tự chọn), nhưng vẫn nên CẢNH BÁO người dùng biết mã màu hóa đơn ghi rõ ràng
+      // không khớp với mã đang được chọn (khác hẳn 1 cảnh báo mập mờ "2 ứng viên ngang điểm" thông
+      // thường), để họ tự quyết định giữ mã tạm này hay tạo mã mới. Chỉ cảnh báo khi (a) hóa đơn
+      // CÓ trích được mã màu rõ ràng trong dấu *, (b) mã đang thắng KHÔNG khớp mã đó (xem
+      // codeTokenAppearsIn()/extractAllAsteriskCodeTokens() phía trên), VÀ (c) có ít nhất 1 mã
+      // KHÁC trong kho khớp ĐÚNG mã màu đó để gợi ý làm "alternative" tham khảo (nếu kho không có
+      // mã nào khớp màu dù ở giá nào, không có gì để gợi ý nên không cảnh báo, tránh nhiễu).
+      if (!ambiguous && invCodeTokens.length > 0 && !best.hasCodeMatch) {
+        let codeCandidate = candidates.find(c => c.item.code !== best.item.code && c.hasCodeMatch);
+        if (codeCandidate) {
+          ambiguous = true;
+          alternative = codeCandidate.item;
+        }
+      }
+
+      // [Cảnh báo cấp độ nhớt KHÔNG khớp] - xem chú thích bugfix chi tiết tại
+      // extractViscosityTokens() phía trên. Độc lập hoàn toàn với việc CHỌN mã (chỉ thêm cảnh
+      // báo, không đổi kết quả `best` đã chọn).
+      if (!ambiguous && invViscTokens.length > 0) {
+        let bestVisc = [...extractViscosityTokens(best.item.name), ...extractViscosityTokens(best.item.desc)];
+        let bestViscMatches = bestVisc.some(v => invViscTokens.includes(v));
+        if (!bestViscMatches) {
+          let viscCandidate = candidates.find(c => {
+            if (c.item.code === best.item.code) return false;
+            let cVisc = [...extractViscosityTokens(c.item.name), ...extractViscosityTokens(c.item.desc)];
+            return cVisc.some(v => invViscTokens.includes(v));
+          });
+          if (viscCandidate) {
+            ambiguous = true;
+            alternative = viscCandidate.item;
+          }
+        }
+      }
+
+      // [Cảnh báo mã KHÁC khớp TÊN cao hơn hẳn nhưng bị loại khỏi so giá vì THIẾU GIÁ MUA
+      // (buyPrice=0) dù CÒN TỒN KHO THẬT (stock>0) trong kho MISA] - độc lập hoàn toàn với việc
+      // CHỌN mã (chỉ thêm cảnh báo, không đổi kết quả `best` đã chọn), cùng nguyên lý với cảnh
+      // báo mã màu/cấp nhớt phía trên. Ca thực tế (HĐ 412 & 430, NCC "Thực phẩm Mai Thảo"): "Dầu
+      // nhớt 3100 GOLD 4T 10W40 20X0.8L" khớp TÊN đúng nhất với mã Motul 3374650424828 (Diễn
+      // giải "Dầu nhớt Motul 3100 Gold 4T 10W40 0.8L*20" - khớp 7/8 từ khóa kể cả "Motul"/
+      // "3100"/"Gold", nameScore 437.5) nhưng mã này có buyPrice=0 trong kho (dữ liệu thiếu giá
+      // dù còn tồn 235) nên priceScore=0, bị mã Castrol POWER1 SAI HÃNG hoàn toàn "vượt" chỉ vì
+      // nó có giá mua thật (khớp tên yếu hơn hẳn - nameScore 312.5 - nhưng priceScore 350 nhờ
+      // giá lệch 3.6%). Toàn kho MISA chỉ khoảng 5 mã bị lỗi buyPrice=0 dù còn tồn kho thật, đây
+      // là LỖ HỔNG DỮ LIỆU (thiếu giá mua trong MISA) chứ không phải lỗi thuật toán - không có
+      // giá thật nào để tự suy luận thay, nên KHÔNG tự động đổi kết quả, chỉ cảnh báo để người
+      // dùng biết có 1 mã khác khớp tên cao hơn hẳn đang bị bỏ qua vì thiếu giá, tự quyết định
+      // bổ sung giá mua mã đó vào MISA hay không.
+      // [Bugfix - BẮT BUỘC thêm điều kiện stock>0 cho ứng viên buyPrice=0]: bản vá đầu tiên chỉ
+      // xét buyPrice=0 (không xét tồn kho) nên bị "dính" hàng LOẠT ca vô hại khi đối chiếu FULL
+      // 24 hóa đơn thật: kho MISA có rất nhiều mã TRÙNG TÊN/DIỄN GIẢI 100% với 1 mã khác đang
+      // dùng thật, nhưng bản thân là mã CŨ/TRÙNG/KHÔNG CÒN SỬ DỤNG (stock=0 VÀ buyPrice=0 CẢ
+      // HAI - VD "Đai ốc 8mm" mã 90301KWB600., "Bu lông 8x25" mã 90131KGH900., "Lò xo má pu ly
+      // bị động" mã 23233K35V00., "BỘ CÁNH YẾM TRÁI*NHB55P*" mã 64770K89VB0ZA - tất cả stock=0).
+      // Đây KHÔNG phải ca "còn tồn kho thật nhưng thiếu giá" như ca Motul gốc, mà là mã rác/mã
+      // trùng đã ngừng dùng - cảnh báo cho các ca này chỉ gây nhiễu vô ích, không giúp ích gì.
+      // Chỉ còn đúng 1 tín hiệu đáng tin để phân biệt 2 loại ca: ca ĐÁNG cảnh báo (Motul) có
+      // stock=235 (còn hàng thật), ca KHÔNG đáng cảnh báo (rác) có stock=0. Thêm điều kiện
+      // stock>0 thu hẹp đúng về phạm vi ~5 mã đã khảo sát ban đầu, loại bỏ hoàn toàn nhiễu từ
+      // các mã rác/trùng stock=0. Ngưỡng chênh nameScore >=100 (đúng 1 bậc priceScore liền kề)
+      // vẫn giữ để chỉ cảnh báo khi khoảng cách khớp tên đủ rõ ràng.
+      if (!ambiguous) {
+        let noPriceBetterNameCandidate = candidates.find(c => {
+          if (c.item.code === best.item.code) return false;
+          let cItemPrice = Number(c.item.buyPrice) || 0;
+          let cStock = Number(c.item.stock) || 0;
+          return cItemPrice === 0 && cStock > 0 && (c.nameScore - best.nameScore) >= 100;
+        });
+        if (noPriceBetterNameCandidate) {
+          ambiguous = true;
+          alternative = noPriceBetterNameCandidate.item;
+        }
+      }
+
       return { item: best.item, ambiguous, alternative };
     }
 
