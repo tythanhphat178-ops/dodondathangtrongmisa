@@ -3141,6 +3141,72 @@
       currentInvoiceWarehouseTag = detectKnownWarehouseTag(fullDocText);
     }
 
+    // [Bugfix - NCC Hòa Bình Minh, hóa đơn C26TBK số 2708 ngày 03/09/2026, dòng 141 mã
+    // "64345KTL640"] Một dòng HIẾM trong hóa đơn PDF của NCC này bị lỗi font/CMap khiến CẢ
+    // CỤM TÊN HÀNG NHIỀU TỪ bị pdf.js trích xuất dính liền thành 1 CHUỖI DUY NHẤT KHÔNG CÓ
+    // DẤU CÁCH và MẤT LUÔN chữ hoa đầu mỗi từ (trừ chữ cái đầu tiên) - ví dụ tên hàng đúng ra
+    // là "Bộ Ốp Trung Tâm Trái" (đúng y hệt cách viết hoa/cách dấu cách ở các dòng khác cùng
+    // hóa đơn, VD dòng 143 "Bộ Ốp Trung Tâm Phải") lại bị bóc tách ra thành "Bộốptrungtâmtrái"
+    // dính liền. Khác với các lỗi PUA/khoảng-hở-X đã xử lý ở trên (vốn xảy ra GIỮA CÁC TEXT RUN
+    // riêng biệt của pdf.js, có thể sửa bằng cách chèn thêm dấu cách), lỗi này xảy ra NGAY TỪ
+    // KHÂU TRÍCH XUẤT của pdf.js: toàn bộ cụm từ đã bị dồn sẵn vào ĐÚNG 1 text run duy nhất
+    // (get TextContent trả về str dính liền, không hề có text run riêng nào khác để mà chèn
+    // dấu cách vào giữa) - nhiều khả năng do khoảng cách giữa các từ ở dòng này được font nhúng
+    // của phần mềm phát hành hóa đơn vẽ bằng 1 độ dịch chuyển TJ nhỏ bất thường thay vì bằng
+    // glyph dấu cách thật, khiến pdf.js không nhận ra đó là ranh giới từ. KHÔNG có cách nào tự
+    // suy luận lại dấu cách/chữ hoa chỉ dựa vào riêng dòng bị lỗi này. Nhưng CÓ THỂ khôi phục
+    // ĐÚNG dựa vào chính CÁC DÒNG KHÁC đã bóc tách hợp lệ của CÙNG hóa đơn: hầu hết tên hàng
+    // của NCC này ghép lại từ 1 tập từ vựng lặp đi lặp lại nhiều lần giữa các dòng (Bộ/Ốp/Nắp/
+    // Trước/Sau/Trái/Phải/Trung/Tâm/Yếm/Ống/Chính...). Xây "từ điển" gồm mọi TỪ THUẦN CHỮ CÁI
+    // (bỏ qua từ lẫn số/ký tự đặc biệt như "*Nha69P*", mã màu...) xuất hiện trong tên các dòng
+    // hàng KHÁC đã có dấu cách hợp lệ trong CÙNG hóa đơn (giữ nguyên chữ hoa/thường gốc làm
+    // "bản chuẩn" cho từng từ), rồi thử TÁCH TỪ THAM LAM (greedy, ưu tiên khớp đoạn dài nhất
+    // trước ở mỗi vị trí, so khớp không phân biệt hoa/thường) chuỗi dính liền theo từ điển đó.
+    // Chỉ áp dụng kết quả khi tách được KHỚP TRỌN VẸN toàn bộ chuỗi (không dư ký tự nào không
+    // khớp được từ nào) và tách ra được >=2 từ - nếu có bất kỳ phần dư nào không khớp, GIỮ
+    // NGUYÊN dòng gốc như cũ (không đoán mò) để tránh làm sai lệch dữ liệu so với bản gốc.
+    (function repairGluedInvoiceNames(items) {
+      const vocab = new Map(); // từ (viết thường, để so khớp) -> dạng viết hoa/thường "chuẩn" gặp đầu tiên
+      for (const it of items) {
+        const nm = it.invName || '';
+        if (!nm || !nm.includes(' ')) continue;
+        for (const w of nm.split(/\s+/)) {
+          if (!w || !/^[A-Za-zÀ-ỹ]+$/.test(w)) continue; // chỉ nhận từ thuần chữ cái, bỏ qua từ lẫn số/ký tự đặc biệt
+          const key = w.toLowerCase();
+          if (!vocab.has(key)) vocab.set(key, w);
+        }
+      }
+      if (vocab.size === 0) return;
+      let maxWordLen = 0;
+      for (const k of vocab.keys()) if (k.length > maxWordLen) maxWordLen = k.length;
+
+      for (const it of items) {
+        const nm = it.invName || '';
+        // Chỉ nhắm đúng dạng "cụm nhiều từ bị dính liền": chuỗi dài, thuần chữ cái, KHÔNG có
+        // dấu cách nào - tên hàng bình thường (đã có dấu cách, hoặc 1 từ đơn ngắn) không đụng tới.
+        if (!nm || nm.includes(' ') || nm.length < 10 || !/^[A-Za-zÀ-ỹ]+$/.test(nm)) continue;
+        const lower = nm.toLowerCase();
+        let pos = 0;
+        const words = [];
+        let matchedAll = true;
+        while (pos < lower.length) {
+          let matchedKey = null;
+          for (let len = Math.min(maxWordLen, lower.length - pos); len >= 1; len--) {
+            const cand = lower.slice(pos, pos + len);
+            if (vocab.has(cand)) { matchedKey = cand; break; }
+          }
+          if (!matchedKey) { matchedAll = false; break; }
+          words.push(vocab.get(matchedKey));
+          pos += matchedKey.length;
+        }
+        if (matchedAll && words.length >= 2) {
+          const fixedName = words.join(' ');
+          it.rawName = it.rawName.slice(0, it.rawName.length - nm.length) + fixedName;
+          it.invName = fixedName;
+        }
+      }
+    })(allParsedItems);
+
     return allParsedItems;
   }
 
