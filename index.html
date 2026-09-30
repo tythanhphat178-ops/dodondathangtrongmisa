@@ -552,16 +552,28 @@
             let rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 
             if (!rows || rows.length === 0) return;
+            // Tự dò cột theo dòng tiêu đề (mặc định: B=Mã, C=Tên, E=ĐVT, F=Số lượng tồn)
+            let cCode = 1, cName = 2, cUnit = 4, cTon = 5;
+            for (let i = 0; i < Math.min(rows.length, 15); i++) {
+                const h = (rows[i] || []).map(x => normalizeStr(x));
+                if (h.includes('ma') && h.some(x => x.includes('so luong ton'))) {
+                    cCode = h.indexOf('ma');
+                    cName = h.indexOf('ten') >= 0 ? h.indexOf('ten') : cName;
+                    const u = h.findIndex(x => x.includes('don vi tinh')); if (u >= 0) cUnit = u;
+                    cTon = h.findIndex(x => x.includes('so luong ton'));
+                    break;
+                }
+            }
             for (let i = 0; i < rows.length; i++) {
                 const r = rows[i];
                 if (!r || r.length === 0) continue;
-                let code = (r[1] !== undefined && r[1] !== null ? r[1].toString() : '').trim();
+                let code = (r[cCode] !== undefined && r[cCode] !== null ? r[cCode].toString() : '').trim();
                 let lowerCode = code.toLowerCase();
                 if (!code || lowerCode === 'mã' || lowerCode.includes('danh sách') || lowerCode.startsWith('tổng')) continue;
 
-                let name = (r[2] !== undefined && r[2] !== null ? r[2].toString() : '').trim();
-                let unit = (r[4] !== undefined && r[4] !== null ? r[4].toString() : '').trim();
-                let tonStr = (r[5] !== undefined && r[5] !== null ? r[5].toString() : '0').replace(/,/g, '').trim();
+                let name = (r[cName] !== undefined && r[cName] !== null ? r[cName].toString() : '').trim();
+                let unit = (r[cUnit] !== undefined && r[cUnit] !== null ? r[cUnit].toString() : '').trim();
+                let tonStr = (r[cTon] !== undefined && r[cTon] !== null ? r[cTon].toString() : '0').replace(/,/g, '').trim();
                 let tonMisa = parseFloat(tonStr) || 0;
 
                 mapMisa.set(lowerCode, { code, name, unit, tonMisa });
@@ -613,6 +625,11 @@
             let tonSheetName = wb.SheetNames.find(n => !n.toUpperCase().includes('NCC')) || wb.SheetNames[0];
             let sheet = wb.Sheets[tonSheetName];
             let rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+            // Tự dò cột "Tồn cuối" theo tiêu đề (mặc định cột G)
+            let cTonSv = 6;
+            const hSv = (rows[0] || []).map(x => normalizeStr(x));
+            const iTon = hSv.findIndex(x => x.includes('ton cuoi'));
+            if (iTon >= 0) cTonSv = iTon;
 
             for (let i = 0; i < rows.length; i++) {
                 const r = rows[i];
@@ -623,7 +640,7 @@
 
                 let name = (r[1] !== undefined && r[1] !== null ? r[1].toString() : '').trim();
                 let unit = (r[2] !== undefined && r[2] !== null ? r[2].toString() : '').trim();
-                let tonStr = (r[6] !== undefined && r[6] !== null ? r[6].toString() : '0').replace(/,/g, '').trim();
+                let tonStr = (r[cTonSv] !== undefined && r[cTonSv] !== null ? r[cTonSv].toString() : '0').replace(/,/g, '').trim();
                 let tonSv = parseFloat(tonStr) || 0;
 
                 let ncc = mapNcc.get(lowerCode) || '';
@@ -693,6 +710,8 @@
                 r.diff = r.total - r.tonMisa;
 
                 if (!s && !m) { r.decision = '🟡 CẢNH BÁO'; r.reason = 'Mã mới chưa có tồn'; r.status = 'WARN'; }
+                else if (!s) { r.decision = '🟡 CẢNH BÁO'; r.reason = 'Không tìm thấy mã trong file SV (kiểm tra lại sv.xlsx)'; r.status = 'WARN'; }
+                else if (!m) { r.decision = '🟡 CẢNH BÁO'; r.reason = 'Không tìm thấy mã trong file MISA (kiểm tra lại misa.xlsx)'; r.status = 'WARN'; }
                 else if (r.tonMisa === r.tonSv || r.diff > 3) { r.decision = '🟢 XUẤT HÀNG'; r.reason = 'Đủ điều kiện xuất'; r.status = 'PASS'; }
                 else { r.decision = '🔴 TỪ CHỐI'; r.reason = 'Lệch tồn kho không đủ điều kiện'; r.status = 'FAIL'; }
             });
