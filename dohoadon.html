@@ -355,6 +355,7 @@
   let currentInvoiceName = '';
   let currentInvoiceSupplierBrand = ''; // NCC/hãng dò được từ hóa đơn đang nạp (VD: honda, suzuki, sym, yamaha, ngk...)
   let knownWarehouseTags = []; // Danh sách các giá trị "Kho ngầm định" (NCC) khác nhau, khác rỗng, đã thấy trong danh mục MISA
+  let currentInvoiceSellerName = ''; // Tên người bán đọc được trên hóa đơn (dùng để kiểm tra khi suy NCC - xem inferWarehouseTagFromRows)
   let currentInvoiceWarehouseTag = ''; // Tag "Kho ngầm định" khớp với tên NCC trên hóa đơn đang nạp (VD: "MAI THAO")
   let currentFilter = 'all';
   let activeEditingIndex = null;
@@ -449,6 +450,8 @@
     let str = String(s).toLowerCase();
     str = str.replace(/kiếng/g, 'kính').replace(/khoá/g, 'khóa').replace(/dearm/g, 'dream').replace(/sirus/g, 'sirius').replace(/cụm/g, 'bộ');
     str = str.replace(/lốp/g, 'vỏ').replace(/kim cương/g, '3d');
+    // [Bổ sung theo yêu cầu - "Mô tơ khởi động" / "Mô tơ đề" (tên hóa đơn) = "Củ đề" (tên kho)]
+    str = str.replace(/m[ôo]\s*t[ơo]\s*kh[ởo]i\s*đ[ộo]ng/g, 'củ đề').replace(/m[ôo]\s*t[ơo]\s*đ[ềe]/g, 'củ đề');
     str = str.replace(/[\-_/()\[\]*,.]+/g, ' ');
     return str.split(/\s+/).filter(Boolean).join(' ');
   }
@@ -566,6 +569,40 @@
     if (!text) return null;
     let m = String(text).match(/(\d{1,3})\s*[.\/]\s*(\d{1,3})\s*-\s*(\d{1,3})/);
     return m ? (m[1] + '-' + m[2] + '-' + m[3]) : null;
+  }
+
+  // [Bugfix - CỠ KÉP của ruột/săm ("1.85/200-17", "1.85/2.00-17", "2.25/2.50-17") bị đọc SAI
+  // bởi extractTireSizeToken() (regex chỉ hiểu dạng "rộng/biên dạng-vành" như 70/90-17): ca thực
+  // tế HĐ 255 NCC Minh Gia Vinh "Ruột 1.85/200-17 TR4S (Chengshin)" bị đọc thành cỡ "85-200-17",
+  // còn mã ĐÚNG A.14029 (Tên "Ruột nhỏ 1.85/2.00-17 Chensing", Diễn giải "Ruột 1.85/200-17 TR4S",
+  // trùng giá tuyệt đối 30.741đ) lại đọc thành "2-00-17" -> 2 cỡ "khác nhau" -> bị LOẠI THẲNG,
+  // báo "KHÔNG TÌM THẤY" dù kho có đúng mã. Sửa: trích TẬP HỢP cỡ - cỡ kép dạng thập phân
+  // "A/B-R" (A có dấu chấm) hiểu là 2 cỡ thay thế nhau {A-R, B-R} (B viết "200" hiểu là 2.00);
+  // cỡ "rộng/biên dạng-vành" (70/90-17) và cỡ đơn thập phân (2.50-17) giữ nguyên 1 cỡ. Chỉ loại
+  // ứng viên khi 2 tập hợp KHÔNG có cỡ nào chung (cùng tinh thần "chỉ loại khi chắc chắn khác").
+  function extractTireSizeSet(text) {
+    if (!text) return [];
+    const t = String(text);
+    const fixW = w => {
+      w = String(w);
+      if (!w.includes('.') && /^\d{3}$/.test(w)) w = w[0] + '.' + w.slice(1); // "200" -> "2.00"
+      let n = parseFloat(w);
+      return isNaN(n) ? w : n.toFixed(2);
+    };
+    // Lấy MỌI cỡ ghi trong chuỗi (VD Tên "Vỏ xe điện 3.50-10 SOBEK ... ( 90/100-10 )" ghi cả 2
+    // cách gọi cùng 1 cỡ) - chỉ loại ứng viên khi KHÔNG có cỡ nào chung với hóa đơn.
+    let out = new Set();
+    const re = /(\d{1,3}(?:\.\d{1,2})?)\s*\/\s*(\d{1,3}(?:\.\d{1,2})?)\s*-\s*(\d{1,3})|(\d{1,3})\s*\.\s*(\d{1,3})\s*-\s*(\d{1,3})/g;
+    let m;
+    while ((m = re.exec(t)) !== null) {
+      if (m[1] !== undefined) {
+        if (m[1].includes('.')) { out.add(fixW(m[1]) + '-' + m[3]); out.add(fixW(m[2]) + '-' + m[3]); }
+        else out.add(m[1] + '/' + m[2] + '-' + m[3]);
+      } else {
+        out.add(fixW(m[4] + '.' + m[5]) + '-' + m[6]);
+      }
+    }
+    return Array.from(out);
   }
 
   // [Bugfix - khớp NHẦM SANG KÍCH CỠ MM KHÁC khi tên hàng chỉ khác nhau đúng 1 con số kích
@@ -735,6 +772,140 @@
   // xong, an toàn tuyệt đối, không có rủi ro đổi kết quả khớp ở bất kỳ hóa đơn nào khác) dành
   // riêng cho định dạng cấp độ nhớt chuẩn quốc tế "số+W+số" (VD 10W40, 20W-40, 15W50...) - định
   // dạng RẤT đặc trưng, không thể khớp nhầm ngẫu nhiên với văn bản khác.
+  // [Bugfix - khớp NHẦM SANG DÒNG XE KHÁC / NĂM ĐỜI KHÁC ở tầng khớp từ khóa. Ca thực tế (hóa
+  // đơn NCC Vũ Trụ, số HĐ 12800): "THẢM LÓT CHÂN VISION 2025 CAO SU" (25.000đ) bị khớp vào A.3420
+  // (Diễn giải "THẢM LÓT CHÂN AIR BLADE 2025 CAO SU", cùng 25.000đ) thay vì mã ĐÚNG có sẵn A.3523
+  // ("THẢM CHÂN VISION 2025 CAO SU", cùng 25.000đ); "...VISION 2019..." bị khớp vào thảm AIR BLADE
+  // 2019; "...SH 2024..." bị khớp vào thảm SH 2009. Nguyên nhân: tầng khớp từ khóa chỉ ĐẾM số từ
+  // trùng - "Air Blade 2025" và "Vision 2025" đều trùng 6/7 từ (khác đúng 1 từ "lót" hay
+  // "vision") và trùng giá tuyệt đối, nên hòa điểm, chọn đại theo thứ tự trong kho. Tên DÒNG XE
+  // (Vision/Air Blade/SH/Wave...) và NĂM ĐỜI xe là yếu tố định danh sản phẩm quan trọng hơn hẳn
+  // các từ mô tả chung ("lót", "chân", "cao su") nhưng lại bị tính ngang nhau.
+  // Cách xử lý (cùng nguyên lý với cỡ lốp/mm/trái-phải đã có):
+  //  (a) DÒNG XE: nếu CẢ hóa đơn lẫn ứng viên đều nhận diện được ít nhất 1 dòng xe nhưng KHÔNG có
+  //      dòng xe nào chung -> loại thẳng ứng viên. Dò trên Tên + Diễn giải gộp chung của ứng viên
+  //      (chỉ cần 1 trong 2 nhắc đúng dòng xe là đủ), nên mã liệt kê nhiều xe tương thích vẫn an
+  //      toàn; nếu ứng viên chỉ ghi tên viết tắt lạ không có trong danh sách thì coi như "không xác
+  //      định" và KHÔNG loại (chỉ loại khi chắc chắn khác xe).
+  //  (b) NĂM ĐỜI (4 chữ số 2000-2035): KHÔNG loại thẳng (vì 1 đời xe kéo dài nhiều năm, VD "Vision
+  //      14" dùng chung cho xe 2014-2020), chỉ CỘNG điểm khi ứng viên ghi đúng năm hóa đơn, TRỪ
+  //      điểm khi ứng viên có ghi năm nhưng không năm nào trùng, và CẢNH BÁO nếu mã được chọn cuối
+  //      cùng không ghi đúng năm hóa đơn.
+  const VEHICLE_MODEL_PATTERNS = [
+    ['shmode', /\bsh\s*mode\b/g], ['airblade', /\bair\s*blade\b|\bab\b/g],
+    ['vision', /\bvision\b/g], ['lead', /\blead\b/g], ['scoopy', /\bscoopy\b/g],
+    ['vario', /\bvario\b/g], ['click', /\bclick\b/g], ['pcx', /\bpcx\b/g],
+    ['wave', /\bwave\b/g], ['dream', /\bdream\b/g], ['future', /\bfuture\b/g],
+    ['winner', /\bwinner\b/g], ['exciter', /\bexciter\b/g], ['sirius', /\bsirius\b/g],
+    ['jupiter', /\bjupiter\b/g], ['janus', /\bjanus\b/g], ['grande', /\bgrande\b/g],
+    ['nouvo', /\bnouvo\b/g], ['attila', /\battila\b/g], ['elizabeth', /\belizabeth\b/g],
+    ['raider', /\braider\b/g], ['satria', /\bsatria\b/g], ['spacy', /\bspacy\b/g],
+    ['mio', /\bmio\b/g], ['sonic', /\bsonic\b/g], ['msx', /\bmsx\b/g], ['luvias', /\bluvias\b/g],
+    ['nozza', /\bnozza\b/g], ['freego', /\bfreego\b/g], ['latte', /\blatte\b/g],
+    ['blade', /\bblade\b/g], ['sh', /\bsh\b/g]
+  ];
+  function extractVehicleModels(text) {
+    if (!text) return [];
+    let s = removeVietnameseTones(String(text)).toLowerCase();
+    let out = new Set();
+    for (let [model, re] of VEHICLE_MODEL_PATTERNS) {
+      re.lastIndex = 0;
+      if (re.test(s)) {
+        out.add(model);
+        // Xóa cụm đã nhận để "SH Mode" không bị đếm thêm thành "SH", "Air Blade" thành "Blade".
+        if (model === 'shmode') s = s.replace(/\bsh\s*mode\b/g, ' ');
+        if (model === 'airblade') s = s.replace(/\bair\s*blade\b/g, ' ');
+      }
+    }
+    return Array.from(out);
+  }
+  // [Bugfix - khớp NHẦM HÃNG XE và NHẦM SỐ RĂNG nhông/dĩa. Ca thực tế (NCC Thuận Hưng Phát, HĐ 17
+  // ngày 05/10/2026): "Dĩa trước (Nhông) xe máy Recto Ya 15T 2 lỗ" (38.500đ) bị khớp vào
+  // 8858794932166 "Nhông Winner 15R Recto" (Diễn giải "...Honda Nova Dash 15T", cùng 38.500đ) thay
+  // vì mã đúng A.4628 "Nhông 15R Ya 2 lổ Recto" (giá cũ 37.000đ). Nguyên nhân: trùng giá tuyệt đối
+  // thắng, không có gì phân biệt hãng Ya(maha) với Honda; và kể cả khi lọc đúng hãng thì 2 mã
+  // nhông Ya 14R / 15R có cùng Diễn giải + cùng giá, không phân biệt được số răng.]
+  //  (a) HÃNG XE: hóa đơn và ứng viên (Tên + Diễn giải gộp) cùng nhận diện được hãng nhưng không
+  //      có hãng nào chung -> loại thẳng (cùng nguyên lý loại khác dòng xe).
+  //  (b) SỐ RĂNG ("15T"/"15R", 2 chữ số) chỉ xét khi dòng hóa đơn là nhông/dĩa/sên: +150 khi ứng
+  //      viên đúng số răng, -400 khi ứng viên ghi số răng khác. Ưu tiên lấy số răng trong TÊN mã
+  //      (VD "Nhông 15R Ya") vì Diễn giải thường liệt kê cả dãy "13T/14T/15T/16T/17T".
+  const VEHICLE_MAKE_PATTERNS = [
+    ['honda', /\bhonda\b/], ['yamaha', /\byamaha\b|\bya\b/], ['suzuki', /\bsuzuki\b/],
+    ['sym', /\bsym\b/], ['piaggio', /\bpiaggio\b|\bvespa\b/], ['kymco', /\bkymco\b/]
+  ];
+  function extractVehicleMakes(text) {
+    if (!text) return [];
+    const s = removeVietnameseTones(String(text)).toLowerCase();
+    return VEHICLE_MAKE_PATTERNS.filter(([, re]) => re.test(s)).map(([m]) => m);
+  }
+  function isSprocketChainText(text) {
+    return /\b(nhong|dia|sen|nsd|snd)\b/.test(removeVietnameseTones(String(text || '')).toLowerCase());
+  }
+  function extractToothCounts(text) {
+    if (!text) return [];
+    let out = new Set();
+    // "15T", "15R", và dãy kiểu "33/34/35/36T" (số răng chung 1 hậu tố T/R ở cuối dãy)
+    let re = /\b((?:\d{2}\s*\/\s*)*\d{2})\s*[TR]\b/gi, m;
+    while ((m = re.exec(String(text))) !== null) m[1].split('/').forEach(n => out.add(n.trim()));
+    return Array.from(out);
+  }
+
+  // [Bugfix - khớp NHẦM SỐ HIỆU BẠC ĐẠN. Ca thực tế HĐ 4811 NCC Tora Asia: "Bạc đạn TPI bánh gấp
+  // xe No - 6202 LLU" (27.432đ) bị khớp vào bạc đạn 6300 (giá 26.657đ) thay vì mã đúng
+  // P1BA202LK02 "6202 TPI" (đúng 27.432đ); HĐ 4884 "Bạc đạn TPI láp xe ga - 6203 C3" bị khớp vào
+  // bạc đạn 6002. Số hiệu bạc đạn (6xxx, 16xxx, 69xx) là định danh sản phẩm: cả 2 bên đều ghi số
+  // hiệu mà không trùng số nào -> loại thẳng (cùng nguyên lý cỡ lốp/cỡ mm).]
+  function isBearingText(text) {
+    return /\b(bac\s*dan|vong\s*bi|ball\s*bearing)\b/.test(removeVietnameseTones(String(text || '')).toLowerCase());
+  }
+  function extractBearingNumbers(text) {
+    let out = new Set(), m, re = /(?:^|[^0-9a-z])(6\d{3}|16\d{3}|69\d{2})(?![0-9])/gi;
+    while ((m = re.exec(String(text || ''))) !== null) out.add(m[1]);
+    return Array.from(out);
+  }
+  // [Bugfix - dòng BAO BÌ 0đ (vỏ hộp, vỏ túi, thùng carton...) NCC in kèm hóa đơn bị khớp bừa vào
+  // sản phẩm thật. Ca thực tế HĐ 4811/4884 Tora Asia: "Vỏ hộp má phanh đùm Tengu TGBS-H01" 0đ bị
+  // khớp vào "Bố đĩa trước Ya 135 zin" (107.010đ), báo giảm giá -100%.] Không đối chiếu các dòng này.
+  const PACKAGING_LINE_RE = /^\s*(v[oỏ]\s*(h[oộ]p|t[uú]i|th[uù]ng|bao)|bao\s*b[iì]|th[uù]ng\s*carton|h[oộ]p\s*carton)/i;
+
+  // [Bugfix - "LỚN" vs "NHỎ": hóa đơn Tora Asia HĐ 4811 "Gioăng tròn LỚN C110 - 12395-KFL" (558đ)
+  // bị khớp vào A.2525 "Ron tròn NHỎ xanh 2M TORA" (cùng 558đ) thay vì A.2524 "Ron tròn LỚN". Cùng
+  // nguyên lý Trái/Phải: hóa đơn ghi rõ 1 bên mà ứng viên CHỈ ghi bên kia -> loại.]
+  function extractSizeWord(text) {
+    const s = ' ' + removeVietnameseTones(String(text || '')).toLowerCase().replace(/[^a-z0-9]+/g, ' ') + ' ';
+    const big = / lon /.test(s), small = / nho /.test(s);
+    return big && !small ? 'lon' : (small && !big ? 'nho' : null);
+  }
+
+  // [Bugfix - KHÁC MODEL nhưng cùng khuôn tên hải quan dài. Ca thực tế NCC Siêu Việt: HĐ 9852
+  // "Cuộn phát điện, model: KWB-921, dùng cho động cơ xe mô tô, xuất xứ: Trung Quốc, NSX: SANSONG
+  // ..." bị khớp vào A.1795 (Diễn giải "Cuộn phát điện, model: KTM-971, ..." - trùng gần hết chữ
+  // chung) thay vì A.949 "Cuộn dây máy phát điện KWB-921" (đúng giá); HĐ 9743 "Rơ le đề khởi
+  // động, model: KRS/EW-5813D, ... NSX ..." bị khớp vào "Bộ căng xích cam, model: 2ND, ... NSX ..."
+  // thay vì A.975 "Rơ le đề KRS/EW-5813". Model là định danh sản phẩm:]
+  //  (1) hóa đơn ghi "model: X" mà ứng viên ghi "model: Y" và không trùng model nào -> loại;
+  //  (2) mã hóa đơn dạng "2ND-H1410": ứng viên có mã CÙNG ĐUÔI "H1410" nhưng khác đầu (16S-H1410,
+  //      5VT-H1410...) -> loại (cùng loại hàng, khác đời xe);
+  //  (3) ứng viên có chứa đúng mã model của hóa đơn -> cộng điểm.
+  function extractInvoiceModelTokens(text) {
+    let out = [], m, re = /\bmodel\s*[:：]?\s*([A-Za-z0-9][A-Za-z0-9\-\/\.]{1,24})/gi;
+    while ((m = re.exec(String(text || ''))) !== null) {
+      m[1].replace(/[.\-\/]+$/, '').split('/').forEach(t => { t = t.trim().toUpperCase(); if (t.length >= 2) out.push(t); });
+    }
+    return Array.from(new Set(out));
+  }
+  const alnumUpper = t => String(t || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+  function extractModelYears(text) {
+    if (!text) return [];
+    let out = new Set();
+    let re = /(?:^|[^0-9\/\-.,])(20[0-3]\d)(?![0-9])/g;
+    let m;
+    while ((m = re.exec(String(text))) !== null) out.add(m[1]);
+    return Array.from(out);
+  }
+
   function extractViscosityTokens(text) {
     if (!text) return [];
     let out = [];
@@ -1051,6 +1222,32 @@
   // nào trùng với 1 trong các "Kho ngầm định" đã biết trong danh mục MISA hay không (so sánh
   // không phân biệt hoa/thường, không dấu, để chấp nhận sai khác nhỏ về chính tả/khoảng trắng).
   // Ưu tiên tag DÀI NHẤT khớp được, để tránh khớp nhầm 1 từ ngắn chung chung.
+  // [Bugfix - KHÔNG nhận ra NCC khi tên NCC đặt trong kho KHÁC 1 chữ so với tên công ty bán.
+  // Ca thực tế: hóa đơn "CÔNG TY TNHH ẮC QUY QUANG HUỆ" (HĐ 3065, 3163) - kho đặt tên NCC là
+  // "BÌNH QUANG HUỆ" nên dò nguyên cụm không khớp, Kho ngầm định để trống, mất điểm ưu tiên NCC.]
+  // Dự phòng CHỈ dùng trên dòng TÊN NGƯỜI BÁN (không dùng toàn văn), CHỈ chạy khi dò nguyên cụm
+  // thất bại: chấp nhận tag có >=3 chữ mà tên người bán chỉ THIẾU chữ ĐẦU của tag (phần còn lại
+  // khớp nguyên cụm, nguyên từ, >=8 ký tự, sau khi bỏ chữ chung chung như TNHH/dịch vụ); chỉ trả về khi có
+  // DUY NHẤT 1 tag đạt (nhiều tag cùng đạt -> không đoán, để trống như cũ).
+  function detectWarehouseTagPartial(sellerText) {
+    if (!sellerText || knownWarehouseTags.length === 0) return '';
+    // Bỏ các chữ chung chung của tên doanh nghiệp trước khi so, để "DỊCH VỤ NAM THÀNH" không
+    // khớp nhầm "...DỊCH VỤ NAM VIỆT" chỉ nhờ chữ "dịch vụ".
+    const GENERIC = /\b(cong ty|cty|tnhh|mtv|mot thanh vien|co phan|cp|thuong mai|tm|dich vu|dv|san xuat|sx|xuat nhap khau|xnk|dau tu|ky thuat|ho kinh doanh|hkd|ncc|doanh nghiep|tu nhan|dntn|cua hang)\b/g;
+    const norm = t => removeVietnameseTones(String(t)).toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(GENERIC, ' ').replace(/\s+/g, ' ').trim();
+    const plain = ' ' + norm(sellerText) + ' ';
+    let hits = [];
+    for (let tag of knownWarehouseTags) {
+      const words = norm(tag).split(' ').filter(Boolean);
+      // Chỉ chấp nhận tag thừa đúng 1 chữ ĐẦU (kiểu "BÌNH QUANG HUỆ" = loại hàng + tên NCC),
+      // phần còn lại phải >=2 chữ, >=8 ký tự và xuất hiện NGUYÊN CỤM, nguyên từ trong tên bán.
+      if (words.length < 3) continue;
+      const rest = words.slice(1).join(' ');
+      if (rest.length >= 8 && plain.includes(' ' + rest + ' ')) hits.push(tag);
+    }
+    return hits.length === 1 ? hits[0] : '';
+  }
+
   function detectKnownWarehouseTag(text) {
     if (!text || knownWarehouseTags.length === 0) return '';
     const plain = removeVietnameseTones(String(text)).toLowerCase();
@@ -1058,7 +1255,11 @@
     for (let tag of knownWarehouseTags) {
       if (tag.length < 4) continue; // bỏ qua tag quá ngắn, dễ khớp nhầm ngẫu nhiên
       const tagPlain = removeVietnameseTones(tag).toLowerCase();
-      if (plain.includes(tagPlain) && tag.length > best.length) {
+      // [Bugfix - phải khớp NGUYÊN TỪ. Ca thực tế: hóa đơn NCC Tora Asia bị nhận NCC "VŨ TRỤ" vì
+      // tiêu đề cột "Tên hàng hóa, dịch VỤ TRƯớc thuế" bỏ dấu thành "dich vu truoc" - chứa chuỗi
+      // con "vu tru".]
+      const esc = tagPlain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+      if (new RegExp('(^|[^a-z0-9])' + esc + '([^a-z0-9]|$)').test(plain) && tag.length > best.length) {
         best = tag;
       }
     }
@@ -1551,6 +1752,7 @@
     currentInvoiceName = '';
     currentInvoiceSupplierBrand = '';
     currentInvoiceWarehouseTag = '';
+    currentInvoiceSellerName = '';
     loadedInvoiceFilesMeta = [];
     isManualSearchMode = false;
     document.getElementById('cardHeaderTitle').innerText = '📄 Hóa Đơn / Báo Giá Cần So Sánh';
@@ -1575,9 +1777,12 @@
     // Dò NCC/hãng từ TÊN NGƯỜI BÁN trên hóa đơn XML (nếu tên file chưa dò ra hãng).
     // Cấu trúc hóa đơn điện tử TT78/NĐ123 thường có khối người bán tên thẻ NBan/NguoiBan/Seller,
     // bên trong có thẻ Ten là tên công ty bán hàng (VD: "CÔNG TY TNHH HONDA VIỆT NAM").
-    if (!currentInvoiceSupplierBrand) {
+    // [Bugfix - nhánh XML trước đây KHÔNG dò "Kho ngầm định" (NCC) như nhánh PDF/Excel, nên
+    // hóa đơn XML không bao giờ được cộng điểm ưu tiên đúng NCC.] Luôn đọc tên người bán trước,
+    // dùng chung cho cả việc dò hãng lẫn dò NCC.
+    let sellerName = '';
+    {
       let sellerBlockTags = ['NBan', 'NguoiBan', 'Seller', 'DVBH'];
-      let sellerName = '';
       const allEls = xmlDoc.getElementsByTagName('*');
       for (let e of allEls) {
         if (e.localName && sellerBlockTags.some(t => t.toLowerCase() === e.localName.toLowerCase())) {
@@ -1589,8 +1794,17 @@
           if (tenEl && tenEl.textContent) { sellerName = tenEl.textContent.trim(); break; }
         }
       }
+    }
+    if (!currentInvoiceSupplierBrand) {
       // Dự phòng: nếu không tìm được đúng khối người bán, quét toàn bộ nội dung XML
       currentInvoiceSupplierBrand = detectBrandKeyword(sellerName) || detectBrandKeyword(text);
+    }
+    // Chỉ dò NCC trong TÊN NGƯỜI BÁN (không quét toàn văn XML vì có cả địa chỉ/tên người mua,
+    // dễ khớp nhầm - xem chú thích bugfix "CHÍ MINH" tại parsePdfInvoice()).
+    if (!currentInvoiceWarehouseTag && sellerName) {
+      if (!currentInvoiceSellerName) currentInvoiceSellerName = sellerName;
+      currentInvoiceWarehouseTag = detectKnownWarehouseTag(sellerName);
+      if (!currentInvoiceWarehouseTag) currentInvoiceWarehouseTag = detectWarehouseTagPartial(sellerName);
     }
 
     const parsedItems = [];
@@ -1709,6 +1923,7 @@
     const pdf = await loadingTask.promise;
     let allParsedItems = [];
     let fullDocText = '';
+    let firstPageLines = []; // các dòng trang 1, dùng để dò đúng dòng TÊN CÔNG TY BÁN (xem bugfix "CHÍ MINH" bên dưới)
 
     for (let p = 1; p <= pdf.numPages; p++) {
       const page = await pdf.getPage(p);
@@ -1963,6 +2178,7 @@
       }
 
       fullDocText += ' ' + rawLines.join(' ');
+      if (p === 1) firstPageLines = rawLines.slice();
 
       // --- BÓC TÁCH DÒNG HÀNG HÓA (hỗ trợ tên hàng bị ngắt thành NHIỀU dòng bất kỳ, với
       // dòng chứa STT+số liệu (ĐVT/SL/Đơn giá/Thành tiền/Thuế suất/Tiền thuế) có thể nằm ở
@@ -3134,11 +3350,44 @@
         }
       }
       currentInvoiceSupplierBrand = detectBrandKeyword(nonItemText);
+      // [Bugfix - hãng của 1 DÒNG HÀNG bị nhận nhầm thành hãng của CẢ HÓA ĐƠN. Ca thực tế: HĐ 828
+      // NCC Angimex Furious (191 dòng phụ tùng Honda) có 1 dòng "Lốp trước (70/90-17 MC 38P) (IRC"
+      // bị ngắt dòng; mảnh "(IRC" dài 4 ký tự lọt qua bước loại từ >=5 ký tự ở trên -> cả hóa đơn
+      // bị gán hãng "irc", làm LOẠI hoặc trừ điểm mọi mã đúng không ghi IRC (VD "Bộ ốp giữa thân
+      // *NHA40*" bị khớp sang "Bô E Vario"). Tương tự HĐ 1533 Hân Quân bị gán "yoko" chỉ vì 1 dòng
+      // nhớt Yoko giữa các dòng bình Globe. Hãng chung của hóa đơn chỉ nên đến từ phần đầu/cuối
+      // hóa đơn (tên người bán...), nên nếu hãng dò được CÓ xuất hiện trong tên bất kỳ dòng hàng
+      // nào thì bỏ - từng dòng hàng vẫn tự dò hãng riêng từ tên của nó như cũ.]
+      if (currentInvoiceSupplierBrand && allParsedItems.some(it =>
+            detectBrandKeyword((it.rawName || '') + ' ' + (it.invName || '')) === currentInvoiceSupplierBrand)) {
+        currentInvoiceSupplierBrand = '';
+      }
     }
     // Dò xem tên công ty bán hàng trên hóa đơn có trùng với 1 tag "Kho ngầm định" (NCC) nào
     // đã có sẵn trong danh mục MISA hay không (VD: "MAI THAO"), để ưu tiên khớp đúng NCC đó.
+    // [Bugfix - NCC bị nhận NHẦM theo ĐỊA CHỈ thay vì tên công ty bán. Ca thực tế: hóa đơn NCC
+    // Đức Ký (HĐ 5782, địa chỉ "...TP Hồ Chí Minh") bị gán Kho ngầm định "CHÍ MINH" (1 NCC khác
+    // có thật trong kho) thay vì "ĐỨC KÝ". Nguyên nhân: trước đây quét TOÀN VĂN hóa đơn (gồm cả
+    // địa chỉ người bán/người mua) rồi chọn tag DÀI NHẤT khớp được - "CHÍ MINH" (8 ký tự) dài
+    // hơn "ĐỨC KÝ" (6 ký tự) nên thắng. Mọi NCC ở TP.HCM có tên ngắn hơn đều dính lỗi này. Sửa:
+    // ƯU TIÊN dò trong dòng TÊN CÔNG TY BÁN ở trang 1 (dòng đầu tiên bắt đầu bằng "CÔNG TY"/"CTY"/
+    // "CỬA HÀNG"/"HỘ KINH DOANH"/"DNTN"/"DOANH NGHIỆP"/"Đơn vị bán" - người bán luôn in TRƯỚC người
+    // mua, còn tên người mua luôn có nhãn "Tên đơn vị:" đứng trước nên không khớp), ghép thêm 1
+    // dòng kế tiếp phòng tên dài bị ngắt dòng (VD "...THỰC" / "PHẨM MAI THẢO"). Chỉ khi không
+    // tìm thấy NCC nào ở đó mới quét toàn văn như cũ, nhưng bỏ các dòng "Địa chỉ".
     if (!currentInvoiceWarehouseTag) {
-      currentInvoiceWarehouseTag = detectKnownWarehouseTag(fullDocText);
+      const SELLER_LINE_RE = /^(công\s*ty|cty|cửa\s*hàng|hộ\s*kinh\s*doanh|dntn|doanh\s*nghiệp|đơn\s*vị\s*bán)/i;
+      let sellerIdx = firstPageLines.findIndex(l => SELLER_LINE_RE.test(String(l).trim()));
+      let sellerText = sellerIdx !== -1
+        ? firstPageLines.slice(sellerIdx, sellerIdx + 2).join(' ').replace(/(mã\s*số\s*thuế|địa\s*chỉ|tax\s*code).*$/i, '')
+        : '';
+      if (!currentInvoiceSellerName && sellerText) currentInvoiceSellerName = sellerText;
+      currentInvoiceWarehouseTag = detectKnownWarehouseTag(sellerText);
+      if (!currentInvoiceWarehouseTag) currentInvoiceWarehouseTag = detectWarehouseTagPartial(sellerText);
+      if (!currentInvoiceWarehouseTag) {
+        let noAddrText = firstPageLines.filter(l => !/^\s*(địa\s*chỉ|address)/i.test(l)).join(' ');
+        currentInvoiceWarehouseTag = detectKnownWarehouseTag(noAddrText || fullDocText);
+      }
     }
 
     // [Bugfix - NCC Hòa Bình Minh, hóa đơn C26TBK số 2708 ngày 03/09/2026, dòng 141 mã
@@ -3375,6 +3624,9 @@
 
     // Chặn sớm: dòng khuyến mãi/chiết khấu không phải hàng hóa thật -> không đối chiếu
     if (isPromoNoteLine(rawName) || isPromoNoteLine(invName)) return { item: null, ambiguous: false, alternative: null };
+    if ((parseFloat(invPrice) || 0) === 0 && (PACKAGING_LINE_RE.test(invName || '') || PACKAGING_LINE_RE.test(rawName || ''))) {
+      return { item: null, ambiguous: false, alternative: null, packaging: true };
+    }
 
     let cleanInvCode = cleanCode(invCode);
     let cleanRawCode = cleanCode(rawName);
@@ -3389,6 +3641,8 @@
     // extractTireSizeToken() phía trên. Dò cả invName lẫn rawName (2 dòng thường giống hệt
     // nhau với hàng vỏ/lốp vì không tách được Mã hàng riêng).
     let invSizeToken = extractTireSizeToken(invName) || extractTireSizeToken(rawName);
+    let invSizeSet = extractTireSizeSet(invName);
+    if (invSizeSet.length === 0) invSizeSet = extractTireSizeSet(rawName);
 
     // Cỡ mm của dòng hàng đang xét (nếu có) - xem chú thích bugfix tại extractMmSizeToken()
     // phía trên (ca thực tế "Tem đuôi sau (honda) 60MM" bị khớp nhầm sang mã 65mm).
@@ -3414,6 +3668,27 @@
     // extractSideToken() phía trên (ca thực tế "Mark cánh chim Trái *R340" bị khớp nhầm sang mã
     // bên Phải cùng mã màu chỉ vì Diễn giải của mã Trái đúng bị lỗi dữ liệu MISA).
     let invSideToken = extractSideToken(invName) || extractSideToken(rawName);
+    let invSizeWord = extractSizeWord(invName) || extractSizeWord(rawName);
+
+    // Dòng xe + năm đời của dòng hàng đang xét - xem chú thích bugfix tại extractVehicleModels().
+    let invModels = Array.from(new Set([...extractVehicleModels(invName), ...extractVehicleModels(rawName)]));
+    let invYears = Array.from(new Set([...extractModelYears(invName), ...extractModelYears(rawName)]));
+    let invMakes = Array.from(new Set([...extractVehicleMakes(invName), ...extractVehicleMakes(rawName)]));
+    let invModelTokens = Array.from(new Set([...extractInvoiceModelTokens(invName), ...extractInvoiceModelTokens(rawName)]));
+    // Số mã CÙNG NCC hóa đơn có giá trùng tuyệt đối - chỉ cho phép quy tắc "cùng NCC + trùng giá"
+    // (viaNccPrice bên dưới) khi số này nhỏ (<=3), tránh trùng giá ngẫu nhiên trong NCC lớn.
+    let nccSamePriceCount = 0;
+    if (currentInvoiceWarehouseTag && targetPrice > 0) {
+      const tagN = removeVietnameseTones(currentInvoiceWarehouseTag).toLowerCase().trim();
+      for (let it of masterCatalog) {
+        if (it.warehouse && Math.abs((Number(it.buyPrice) || 0) - targetPrice) < 1 &&
+            removeVietnameseTones(it.warehouse).toLowerCase().trim() === tagN) nccSamePriceCount++;
+      }
+    }
+    let invBearings = (isBearingText(invName) || isBearingText(rawName))
+      ? Array.from(new Set([...extractBearingNumbers(invName), ...extractBearingNumbers(rawName)])) : [];
+    let invTeeth = (isSprocketChainText(invName) || isSprocketChainText(rawName))
+      ? Array.from(new Set([...extractToothCounts(invName), ...extractToothCounts(rawName)])) : [];
 
     // Hàm phụ: xác định hãng của 1 mặt hàng trong kho MISA (dò trong Tên hàng + Diễn giải + Mã)
     const itemBrandOf = (item) => detectBrandKeyword((item.name || '') + ' ' + (item.desc || '') + ' ' + (item.code || ''));
@@ -3422,6 +3697,17 @@
     if (cleanInvCode && cleanInvCode.length >= 4) {
       let exactCodes = masterCatalog.filter(item => cleanCode(item.code) === cleanInvCode);
 
+      // [Bổ sung - kho thêm 1 KÝ TỰ KIỂM TRA vào cuối mã NCC (VD hóa đơn Suzuki Ngọc Yến HĐ 3125
+      // "58300-12K01-000" <-> mã kho "58300-12K01-000Q", Diễn giải lại ghi nhầm "12K00"). Chỉ áp
+      // dụng khi KHÔNG có mã trùng tuyệt đối, mã hóa đơn >=10 ký tự, và có DUY NHẤT 1 mã kho dài
+      // hơn đúng 1 ký tự bắt đầu bằng mã hóa đơn.]
+      if (exactCodes.length === 0 && cleanInvCode.length >= 10) {
+        let suffixCodes = masterCatalog.filter(item => {
+          let c = cleanCode(item.code);
+          return c.length === cleanInvCode.length + 1 && c.startsWith(cleanInvCode);
+        });
+        if (suffixCodes.length === 1) return { item: suffixCodes[0], ambiguous: false, alternative: null };
+      }
       if (exactCodes.length === 1) return { item: exactCodes[0], ambiguous: false, alternative: null };
       if (exactCodes.length > 1) {
         // Nhiều mã trùng nhau (hiếm): ưu tiên đúng NCC trước, rồi mới tới giá gần nhất
@@ -3478,8 +3764,9 @@
       // này TRƯỚC MỌI nhánh chấm điểm tên (kể cả các nhánh "khớp tuyệt đối") để không có
       // đường vòng nào lọt qua được, dù rất khó xảy ra ở các nhánh khớp tuyệt đối.
       if (invSizeToken) {
-        let itemSizeToken = extractTireSizeToken(item.name) || extractTireSizeToken(item.desc);
-        if (itemSizeToken && itemSizeToken !== invSizeToken) continue;
+        let itemSizes = extractTireSizeSet(item.name);
+        if (itemSizes.length === 0) itemSizes = extractTireSizeSet(item.desc);
+        if (itemSizes.length > 0 && !itemSizes.some(z => invSizeSet.includes(z))) continue;
       }
 
       // Cùng nguyên lý như trên, áp dụng cho cỡ mm (tem/mác chữ, kích thước linh kiện...) - xem
@@ -3525,17 +3812,76 @@
         if (hasAnySideToken && !matchesEither) continue;
       }
 
+      // Loại thẳng ứng viên KHÁC DÒNG XE - xem chú thích bugfix tại extractVehicleModels().
+      if (invModels.length > 0) {
+        let itemModels = extractVehicleModels((item.name || '') + ' ' + (item.desc || ''));
+        if (itemModels.length > 0 && !itemModels.some(mm => invModels.includes(mm))) continue;
+      }
+
+      // Loại thẳng ứng viên KHÁC HÃNG XE - xem chú thích bugfix tại extractVehicleMakes().
+      if (invMakes.length > 0) {
+        let itemMakes = extractVehicleMakes((item.name || '') + ' ' + (item.desc || ''));
+        if (itemMakes.length > 0 && !itemMakes.some(mm => invMakes.includes(mm))) continue;
+      }
+
+      // Loại thẳng ứng viên ghi NGƯỢC lớn/nhỏ - xem chú thích tại extractSizeWord().
+      if (invSizeWord) {
+        let itemSizeWord = extractSizeWord((item.name || '') + ' ' + (item.desc || ''));
+        if (itemSizeWord && itemSizeWord !== invSizeWord) continue;
+      }
+
+      // Loại thẳng ứng viên KHÁC SỐ HIỆU BẠC ĐẠN - xem chú thích bugfix tại extractBearingNumbers().
+      if (invBearings.length > 0) {
+        let itemBearings = extractBearingNumbers((item.name || '') + ' ' + (item.desc || ''));
+        if (itemBearings.length > 0 && !itemBearings.some(b => invBearings.includes(b))) continue;
+      }
+
+      // Loại ứng viên KHÁC MODEL - xem chú thích tại extractInvoiceModelTokens().
+      let modelTokenBonus = 0;
+      if (invModelTokens.length > 0) {
+        const itemText = (item.name || '') + ' ' + (item.desc || '');
+        const itemModelTokens = extractInvoiceModelTokens(itemText);
+        const invA = invModelTokens.map(alnumUpper);
+        if (itemModelTokens.length > 0 && !itemModelTokens.some(t => invA.includes(alnumUpper(t)))) continue;
+        let sameTailOther = false;
+        for (let tok of invModelTokens) {
+          const parts = tok.split('-');
+          const tail = parts.length >= 2 ? parts[parts.length - 1] : '';
+          if (tail.length >= 4 && /[A-Z]/.test(tail) && /\d/.test(tail)) {
+            const re = new RegExp('([A-Za-z0-9]{2,6})\\s*-\\s*' + tail + '(?![A-Za-z0-9])', 'gi');
+            let mm;
+            while ((mm = re.exec(itemText)) !== null) {
+              if (alnumUpper(mm[0]) !== alnumUpper(tok)) { sameTailOther = true; break; }
+            }
+          }
+          if (sameTailOther) break;
+        }
+        if (sameTailOther) continue;
+        const itemA = alnumUpper(itemText);
+        if (invA.some(t => t.length >= 3 && itemA.includes(t))) modelTokenBonus = 200;
+      }
+
       let normItemName = normalizeText(item.name);
       let normItemDesc = normalizeText(item.desc);
+      // [Bugfix - Diễn giải có MÃ PHỤ TÙNG đứng đầu ("37080KVG900-Bộ phao xăng") không bao giờ
+      // được tính "khớp Diễn giải tuyệt đối" (900đ) với hóa đơn KHÔNG in mã (NCC Angimex Furious
+      // chỉ in "Bộ phao xăng"), trong khi mã khác có Diễn giải trơn "Bộ phao xăng" (không mã) lại
+      // được 900đ -> mã sai giá thắng mã ĐÚNG GIÁ TUYỆT ĐỐI. Ca thực tế HĐ 808/828/833 Angimex
+      // (17 dòng), VD "Bộ phao xăng" 391.040đ bị khớp 37010KPH900 (405.600đ) thay vì
+      // 37080KVG900 (đúng 391.040đ); "Bình xăng" 516.880đ bị khớp thùng xăng SH thay vì Vision
+      // 14 (đúng giá). Sửa: so thêm Diễn giải đã BỎ tiền tố mã phụ tùng (chuỗi chữ+số >=8 ký tự
+      // có chữ số, đứng đầu, nối bằng "-"), khớp thì cũng được 900đ như Diễn giải trơn.]
+      let descNoCode = String(item.desc || '').replace(/^\s*(?=[0-9A-Za-z.]*\d)[0-9A-Za-z.]{8,16}\s*-\s*/, '');
+      let normItemDescNoCode = descNoCode !== String(item.desc || '') ? normalizeText(descNoCode) : normItemDesc;
       let itemPrice = Number(item.buyPrice) || 0;
 
       let nameScore = 0;
 
       if (normItemName === normInvName && normInvName.length > 0) {
         nameScore = 1000;
-      } else if (normItemDesc === normInvName && normInvName.length > 0) {
+      } else if ((normItemDesc === normInvName || normItemDescNoCode === normInvName) && normInvName.length > 0) {
         nameScore = 900;
-      } else if (normItemDesc === normRawName && normRawName.length > 0) {
+      } else if ((normItemDesc === normRawName || normItemDescNoCode === normRawName) && normRawName.length > 0) {
         nameScore = 850;
       } else if (normInvName.length >= 4 && normItemName.length >= 4 && (normItemName.includes(normInvName) || normInvName.includes(normItemName))) {
         // BUGFIX: bắt buộc normItemName.length >= 4 (không chỉ > 0) - 2 lý do:
@@ -3597,10 +3943,43 @@
         // cũ >=34%, không có gì thay đổi.
         if (matchCount >= 2 && matchRatio >= 0.34) {
           let priceDiffGuard = (targetPrice > 0 && itemPrice > 0) ? Math.abs(itemPrice - targetPrice) : Infinity;
-          let priceIsExactGuard = priceDiffGuard < 1;
+          // [Bugfix - hàng KHUYẾN MÃI 0đ: hóa đơn 0đ và mã kho 0đ cũng là "trùng giá tuyệt đối".
+          // Ca thực tế HĐ 255 Minh Gia Vinh "Ruột xe 2.25/2.50-17 VN #0824 TR4 RE CST (Chengshin)"
+          // SL 15 x 0đ - kho có đúng mã A.14289 (giá 0đ, Diễn giải "...#0824 TR4 RE CST Hàng KM
+          // không thu tiền") nhưng bị báo KHÔNG TÌM THẤY vì 0đ không được tính là trùng giá.]
+          let priceIsExactGuard = priceDiffGuard < 1 || (targetPrice === 0 && itemPrice === 0);
           if (!invSizeToken || matchRatio >= 0.999 || priceIsExactGuard) {
             nameScore = matchRatio * 500;
           }
+        }
+      }
+
+      // [Bổ sung - mã CÙNG NCC + TRÙNG GIÁ TUYỆT ĐỐI nhưng tên gần như không trùng chữ nào. Ca thực
+      // tế HĐ 4884 NCC Tora Asia: "Gioăng máy phải C100 -11394 - 035" 8.225đ - mã đúng A.931 "Ron
+      // nồi DR,W TORA" (NCC TORA THUAN THIEN, đúng 8.225đ) không trùng chữ nào nên không được xét,
+      // app khớp nhầm "Cao su báo xăng Ya zin" (Diễn giải chỉ ghi "Gioăng", giá 14.360đ). Tương tự
+      // "Gioăng máy giữa" -> A.1412 "Ron giữa DR,W TORA", "Má phanh đùm TT ... H01" -> "Bố thắng
+      // đùm W TT H01". Cho các mã này vào xét với điểm tên YẾU (300 - thấp hơn mọi tầng khớp tên
+      // thật >=600), chỉ khi đã biết NCC hóa đơn; đánh dấu viaNccPrice để cảnh báo nếu có ứng
+      // viên khác gần điểm.]
+      // [Cập nhật - Siêu Việt HĐ 9561 "Van khóa xăng tự động, model: 5TN, ..." 32.407đ: 3 mã cùng
+      // NCC cùng giá được cho vào xét NGANG điểm (300) nên app chọn bừa "Chống ngang Alizabeth".
+      // Nay điểm = 250 + 250 x (tỉ lệ từ khóa hóa đơn có trong Tên/Diễn giải ứng viên) để mã có chữ
+      // trùng (A.5617 "Van khóa xăng 5TN-F4500") thắng; nới số mã cùng giá cho phép lên 8, nhưng mã
+      // KHÔNG trùng chữ nào chỉ được xét khi NCC có <=2 mã ở đúng giá đó.]
+      let viaNccPrice = false;
+      if (nameScore < 300 && nccSamePriceCount >= 1 && (nccSamePriceCount <= 8 || (modelTokenBonus > 0 && nccSamePriceCount <= 30)) && currentInvoiceWarehouseTag && item.warehouse && targetPrice > 0 &&
+          Math.abs(itemPrice - targetPrice) < 1 &&
+          removeVietnameseTones(item.warehouse).toLowerCase().trim() === removeVietnameseTones(currentInvoiceWarehouseTag).toLowerCase().trim()) {
+        let tt = normItemName + ' ' + normItemDesc, mc = 0;
+        // chỉ đếm từ khóa >=3 ký tự (bỏ chữ chung chung như "bộ", "xe", "cho")
+        const kws3 = invKeywords.filter(k => k.length >= 3);
+        for (let kw of kws3) if (tt.includes(kw)) mc++;
+        let ratio = kws3.length ? mc / kws3.length : 0;
+        // NCC có >8 mã ở đúng giá thì chỉ nhận mã có chứa đúng MODEL hóa đơn (VD A.975 "Rơ le đề KRS/EW-5813")
+        if (nccSamePriceCount <= 8 ? (mc > 0 || nccSamePriceCount <= 2 || modelTokenBonus > 0) : modelTokenBonus > 0) {
+          nameScore = 250 + 250 * ratio;
+          viaNccPrice = true;
         }
       }
 
@@ -3610,7 +3989,9 @@
         let priceRatio = maxP > 0 ? (priceDiff / maxP) : 0;
 
         let priceScore = 0;
-        if (targetPrice > 0 && itemPrice > 0) {
+        if (targetPrice === 0 && itemPrice === 0) {
+          priceScore = 500; // hàng khuyến mãi 0đ khớp mã kho 0đ - xem bugfix ở tầng từ khóa phía trên
+        } else if (targetPrice > 0 && itemPrice > 0) {
           if (priceDiff < 1) priceScore = 500;
           else if (priceRatio <= 0.05) priceScore = 350;
           else if (priceRatio <= 0.15) priceScore = 200;
@@ -3723,12 +4104,40 @@
           if (hit) codeTokenScore = 150;
         }
 
+        // Điểm NĂM ĐỜI - xem chú thích bugfix tại extractVehicleModels(). +150 khi ứng viên ghi
+        // đúng năm hóa đơn; -400 khi ứng viên CÓ ghi năm nhưng không năm nào trùng (đủ để thắng 1
+        // ứng viên sai năm dù trùng giá tuyệt đối, VD SH 2009 vs SH 2024); 0 khi không ghi năm.
+        // Điểm DÒNG XE: ứng viên KHÁC xe đã bị loại thẳng ở trên; ở đây +200 khi ứng viên nhắc
+        // ĐÚNG dòng xe hóa đơn, -200 khi ứng viên không nhắc dòng xe nào trong danh sách (có thể
+        // là mã dùng chung, hoặc xe khác chưa có trong danh sách như "Mio" trước khi bổ sung) -
+        // để mã đúng xe luôn được ưu tiên hơn mã không rõ xe dù trùng giá.
+        let modelScore = 0;
+        if (invModels.length > 0) {
+          let itemModels2 = extractVehicleModels((item.name || '') + ' ' + (item.desc || ''));
+          modelScore = itemModels2.some(mm => invModels.includes(mm)) ? 200 : -200;
+        }
+        // Điểm SỐ RĂNG nhông/dĩa - xem chú thích bugfix tại extractVehicleMakes().
+        let toothScore = 0;
+        if (invTeeth.length > 0) {
+          let itemTeeth = extractToothCounts(item.name || '');
+          if (itemTeeth.length === 0) itemTeeth = extractToothCounts(item.desc || '');
+          if (itemTeeth.length > 0) toothScore = itemTeeth.some(t => invTeeth.includes(t)) ? 150 : -400;
+        }
+        let yearScore = 0, yearMatch = false;
+        if (invYears.length > 0) {
+          let itemYears = extractModelYears((item.name || '') + ' ' + (item.desc || ''));
+          if (itemYears.some(y => invYears.includes(y))) { yearScore = 150; yearMatch = true; }
+          else if (itemYears.length > 0) yearScore = -400;
+        }
+
         candidates.push({
           item: item,
-          totalScore: brandScore + warehouseScore + nameScore + priceScore + codeTokenScore,
+          totalScore: brandScore + warehouseScore + nameScore + priceScore + codeTokenScore + yearScore + modelScore + toothScore + modelTokenBonus,
+          yearMatch: yearMatch,
           nameScore: nameScore,
           priceDiff: priceDiff,
-          hasCodeMatch: codeTokenScore > 0
+          hasCodeMatch: codeTokenScore > 0,
+          viaNccPrice: viaNccPrice
         });
       }
     }
@@ -3756,6 +4165,22 @@
         return a.priceDiff - b.priceDiff;
       });
       let best = candidates[0];
+
+      // [Bugfix - hóa đơn in RÕ MÃ PHỤ TÙNG chính hãng nhưng mã đó CHƯA CÓ trong kho -> trước đây
+      // app đoán theo tên chung chung rồi trả về 1 mã phụ tùng KHÁC. Ca thực tế HĐ 3021 Hòa Bình
+      // Minh dòng 1 "16SE44110100-Nắp Cụm Lọc Gió 1" (44.530đ): kho không có mã 16SE44110100, app
+      // chọn 5C6E44111100 "Bô E Si, Ju zin" (Diễn giải cũng "Nắp Cụm Lọc Gió 1" - hơn 10 mã kho
+      // cùng tên này cho các xe khác nhau) rồi báo "tăng 12,7%" - sai, đây là hàng MỚI cần tạo
+      // mã. Mã phụ tùng chính hãng là định danh duy nhất: nếu cả mã hóa đơn lẫn mã ứng viên đều
+      // có dạng mã chính hãng (9-14 ký tự chữ+số, có cả chữ và >=4 chữ số) mà KHÁC nhau -> báo
+      // không tìm thấy. Mã EAN toàn số (VD 8936221430482) và mã nội bộ "A.xxx" không bị ảnh hưởng.]
+      const isOemLike = c => { const x = cleanCode(c); return x.length >= 9 && x.length <= 14 && /[A-Z]/i.test(x) && (x.match(/\d/g) || []).length >= 4; };
+      // Mã kho = mã hóa đơn + ĐÚNG 1 ký tự cuối (quy ước thêm ký tự kiểm tra của kho, VD hóa đơn
+      // NCC Suzuki Ngọc Yến "58300-12K01-000" <-> mã kho "58300-12K01-000Q") vẫn là CÙNG 1 mã.
+      const sameCodeWithSuffix = (a, b) => a === b || (b.startsWith(a) && b.length - a.length === 1);
+      if (cleanInvCode && isOemLike(cleanInvCode) && isOemLike(best.item.code) && !sameCodeWithSuffix(cleanInvCode, cleanCode(best.item.code))) {
+        return { item: null, ambiguous: false, alternative: null, codeNotInCatalog: true };
+      }
 
       // [v51 - Bugfix khớp NHẦM SANG HÃNG KHÁC khi đây là ứng viên DUY NHẤT (hoặc tốt nhất) còn
       // lại sau khi lọc cỡ lốp, VD hóa đơn NCC Khang Mỹ Phát "Vỏ Michelin 130/70-17 62S PILOT
@@ -3806,6 +4231,28 @@
           alternative = runner.item;
         }
       }
+      // Mã được chọn chỉ nhờ "cùng NCC + trùng giá" (tên không trùng) mà có ứng viên khác gần điểm
+      // (<=150) -> cảnh báo để người dùng xác nhận.
+      if (!ambiguous && best.viaNccPrice && candidates.length > 1) {
+        let runner = candidates[1];
+        if (runner.item.code !== best.item.code && (best.totalScore - runner.totalScore) <= AMBIGUOUS_MAX_SCORE_GAP) {
+          ambiguous = true;
+          alternative = runner.item;
+        }
+      }
+      // [Bổ sung - khớp YẾU (chỉ qua vài từ khóa, nameScore<600) mà HÒA ĐIỂM TUYỆT ĐỐI với 1 mã
+      // khác thì app thực chất đang chọn NGẪU NHIÊN theo thứ tự trong kho -> cũng phải cảnh báo.
+      // Ca thực tế: Angimex HĐ 812 STT4 / HĐ 834 STT11 "Vít bắt đèn trước" 32.240đ - kho KHÔNG có
+      // mã vít nào như vậy, app chọn "Chụp nhan trước Fu X Phải" (chỉ trùng 2 chữ "đèn trước"),
+      // hòa điểm với "...Trái" và 3 mã khác mà KHÔNG hề cảnh báo. Chỉ áp dụng khi hòa TUYỆT ĐỐI
+      // (không phải chênh <=150 như trên) để không cảnh báo tràn lan các khớp yếu thông thường.]
+      if (!ambiguous && candidates.length > 1 && best.nameScore < AMBIGUOUS_MIN_NAME_SCORE) {
+        let runner = candidates[1];
+        if (runner.item.code !== best.item.code && runner.totalScore === best.totalScore) {
+          ambiguous = true;
+          alternative = runner.item;
+        }
+      }
 
       // [Cảnh báo mã màu/model KHÔNG khớp] - độc lập với cảnh báo mập mờ phía trên (vốn CHỈ kích
       // hoạt khi nameScore đã khá mạnh >=600, không bao giờ áp dụng cho tầng khớp từ khóa yếu
@@ -3845,6 +4292,21 @@
             ambiguous = true;
             alternative = viscCandidate.item;
           }
+        }
+      }
+
+      // [Cảnh báo NĂM ĐỜI không khớp] - hóa đơn ghi rõ năm đời xe nhưng mã được chọn KHÔNG ghi
+      // năm đó (VD hóa đơn "THẢM...VISION 2019", kho chỉ có thảm Vision 2018/2025/"cũ") - không đủ
+      // căn cứ khẳng định đúng mã, báo người dùng tự kiểm tra; gợi ý ưu tiên mã ghi đúng năm, nếu
+      // không có thì gợi ý ứng viên kế tiếp.
+      if (!ambiguous && invYears.length > 0 && !best.yearMatch) {
+        // Chỉ gợi ý mã có điểm tên gần ngang mã được chọn (chênh <=100), tránh gợi ý mã khác loại
+        // hàng chỉ trùng năm/trùng dòng xe (VD "Ốp đèn pha Vision 2019" cho hóa đơn thảm Vision 2019).
+        const closeName = c => c.item.code !== best.item.code && c.nameScore >= MIN_NAME_SCORE_TO_ACCEPT && c.nameScore >= best.nameScore - 100;
+        let yearCandidate = candidates.find(c => closeName(c) && c.yearMatch) || candidates.find(closeName);
+        if (yearCandidate) {
+          ambiguous = true;
+          alternative = yearCandidate.item;
         }
       }
 
@@ -3888,7 +4350,7 @@
         }
       }
 
-      return { item: best.item, ambiguous, alternative };
+      return { item: best.item, ambiguous, alternative, confident: !ambiguous && best.nameScore >= 600 && best.priceDiff < 1 };
     }
 
     return { item: null, ambiguous: false, alternative: null };
@@ -3915,8 +4377,40 @@
     document.getElementById('statUnknown').innerText = countUnknown;
   }
 
+  // [Bổ sung - SUY RA NCC từ chính các dòng khớp CHẮC CHẮN khi tên người bán không trùng NCC nào
+  // trong kho (VD người bán "CÔNG TY TNHH TORA ASIA", kho đặt NCC "TORA THUAN THIEN"). Lấy các
+  // dòng khớp chắc chắn (tên khớp mạnh + đúng giá + không mập mờ); nếu >=3 dòng và >=60% trong
+  // đó cùng 1 Kho ngầm định -> dùng làm NCC của hóa đơn, rồi khớp lại toàn bộ.]
+  function inferWarehouseTagFromRows(invoiceItems) {
+    if (currentInvoiceWarehouseTag) return '';
+    let counts = {}, total = 0;
+    for (let inv of invoiceItems) {
+      const info = matchMisaItemWithInfo(inv.invCode, inv.invName, inv.rawName, inv.price, inv.invBrand);
+      if (info.item && info.confident && info.item.warehouse) {
+        total++;
+        counts[info.item.warehouse] = (counts[info.item.warehouse] || 0) + 1;
+      }
+    }
+    let bestTag = '', bestN = 0;
+    for (let k in counts) if (counts[k] > bestN) { bestN = counts[k]; bestTag = k; }
+    // Kiểm tra chéo: tên NCC suy ra phải có CHUNG ít nhất 1 chữ riêng (bỏ chữ chung chung như
+    // TNHH/thương mại...) với tên người bán trên hóa đơn - VD "TORA THUAN THIEN" ~ "CÔNG TY TNHH
+    // TORA ASIA" (chung "tora") thì nhận; còn hóa đơn Angimex Furious mà phần lớn mã thuộc kho
+    // "HEAD 3" (nơi nhập lần đầu, KHÔNG phải NCC này) thì không nhận.
+    const GENERIC = /\b(cong ty|cty|tnhh|mtv|mot thanh vien|co phan|cp|thuong mai|tm|dich vu|dv|san xuat|sx|xuat nhap khau|xnk|dau tu|ky thuat|ho kinh doanh|hkd|ncc|doanh nghiep|tu nhan|dntn|cua hang|quoc te|viet nam)\b/g;
+    const words = t => removeVietnameseTones(String(t || '')).toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(GENERIC, ' ').split(/\s+/).filter(w => w.length >= 3);
+    const sellerWords = new Set(words(currentInvoiceSellerName));
+    const shareWord = words(bestTag).some(w => sellerWords.has(w));
+    if (total >= 3 && bestN / total >= 0.6 && shareWord) {
+      currentInvoiceWarehouseTag = bestTag;
+      return bestTag;
+    }
+    return '';
+  }
+
   function processComparison(invoiceItems) {
     currentComparison = [];
+    inferWarehouseTagFromRows(invoiceItems);
 
     for (let inv of invoiceItems) {
       // Dùng bản matchMisaItemWithInfo() để lấy thêm cờ "ambiguous" (có mã khác gần ngang điểm
