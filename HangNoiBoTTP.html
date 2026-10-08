@@ -2,124 +2,96 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Gọi Hàng">
   <title>Điều Phối Toa Hàng Nội Bộ</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Lucide Icons (ghim phiên bản để icon không bị mất khi thư viện cập nhật) -->
+  <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
 
-  <!-- Firebase App & Realtime Database SDK (Bản CDN tương thích trực tiếp trên trình duyệt) -->
+  <!-- Firebase App & Realtime Database SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 
   <style>
+    body { padding-bottom: env(safe-area-inset-bottom); -webkit-tap-highlight-color: transparent; }
     @keyframes alert-pulse {
-      0%, 100% {
-        border-color: #ef4444;
-        box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.4), 0 4px 12px rgba(220, 38, 38, 0.25);
-      }
-      50% {
-        border-color: #b91c1c;
-        box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.1), 0 2px 6px rgba(0, 0, 0, 0.05);
-      }
+      0%, 100% { border-color: #ef4444; box-shadow: 0 0 0 4px rgba(239,68,68,.4), 0 4px 12px rgba(220,38,38,.25); }
+      50% { border-color: #b91c1c; box-shadow: 0 0 0 1px rgba(239,68,68,.1), 0 2px 6px rgba(0,0,0,.05); }
     }
-    .card-urgent-alert {
-      animation: alert-pulse 1.1s infinite ease-in-out;
-      background-color: #fef2f2 !important;
-    }
+    .card-urgent-alert { animation: alert-pulse 1.1s infinite ease-in-out; background-color: #fef2f2 !important; }
 
-    /* Hiệu ứng chớp nháy cảnh báo cho Tab Nhóm khi có toa quá hạn */
     @keyframes tab-urgent-pulse {
-      0%, 100% {
-        background-color: #ef4444 !important;
-        color: #ffffff !important;
-        border-color: #dc2626 !important;
-        box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.4), 0 2px 8px rgba(239, 68, 68, 0.5) !important;
-      }
-      50% {
-        background-color: #ffffff !important;
-        color: #ef4444 !important;
-        border-color: #ef4444 !important;
-        box-shadow: none !important;
-      }
+      0%, 100% { background-color: #ef4444; color: #fff; border-color: #dc2626; box-shadow: 0 0 0 3px rgba(239,68,68,.4), 0 2px 8px rgba(239,68,68,.5); }
+      50% { background-color: #fff; color: #ef4444; border-color: #ef4444; box-shadow: none; }
     }
-    .tab-urgent-alert {
-      animation: tab-urgent-pulse 0.9s infinite ease-in-out !important;
-      font-weight: 900 !important;
-      border: 1.5px solid #ef4444 !important;
-    }
+    .tab-urgent-alert { animation: tab-urgent-pulse .9s infinite ease-in-out !important; font-weight: 900 !important; border: 1.5px solid #ef4444 !important; }
 
-    .custom-scrollbar::-webkit-scrollbar {
-      height: 6px;
-      width: 6px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-thumb {
-      background-color: #cbd5e1;
-      border-radius: 9999px;
-    }
+    .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 9999px; }
+
+    details > summary { list-style: none; }
+    details > summary::-webkit-details-marker { display: none; }
+    details[open] .chev { transform: rotate(180deg); }
   </style>
 </head>
 <body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col font-sans antialiased selection:bg-blue-600 selection:text-white">
 
-  <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
-    <div class="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3">
-      <!-- Logo & Tiêu đề -->
-      <div class="flex items-center space-x-2.5">
-        <div class="bg-gradient-to-tr from-blue-700 to-blue-500 text-white p-2 rounded-xl shadow-md flex items-center justify-center">
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-2">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="bg-gradient-to-tr from-blue-700 to-blue-500 text-white p-2 rounded-xl shadow-md flex items-center justify-center shrink-0">
           <i data-lucide="radio" class="w-5 h-5"></i>
         </div>
-        <div>
-          <div class="flex items-center gap-2">
-            <h1 class="text-base sm:text-lg font-black tracking-tight text-slate-900 leading-tight">ĐIỀU PHỐI GỌI HÀNG NỘI BỘ</h1>
-            <span id="cloudStatusBadge" class="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 border border-emerald-200">
-              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Đồng bộ Cloud
+        <div class="min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <h1 class="text-sm sm:text-lg font-black tracking-tight text-slate-900 leading-tight">ĐIỀU PHỐI GỌI HÀNG</h1>
+            <span id="cloudStatusBadge" class="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 border border-slate-200">
+              <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Đang kết nối...
             </span>
           </div>
-          <p class="text-[11px] text-slate-500 hidden sm:block">Dán ảnh Kiot • Tự do điền tên • Đếm ngược 60s • Báo động Trưởng nhóm</p>
+          <p class="text-[11px] text-slate-500 hidden sm:block">Dán / chụp ảnh Kiot • Đếm ngược 60s • Báo động Trưởng nhóm</p>
         </div>
       </div>
 
-      <!-- Header Action Controls -->
-      <div class="flex items-center flex-wrap gap-2">
-        <!-- Nút Bật/Tắt Chuông -->
-        <button id="soundToggleBtn" onclick="toggleSound()" class="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition border shadow-xs">
-          <i id="soundIcon" data-lucide="volume-2" class="w-4 h-4"></i>
+      <div class="flex items-center flex-wrap gap-1.5">
+        <button id="soundToggleBtn" onclick="toggleSound()" class="px-2.5 py-2 sm:py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition border">
+          <i data-lucide="volume-2" class="w-4 h-4"></i>
           <span id="soundText">Chuông: BẬT</span>
         </button>
 
-        <!-- Nút Cho Phép Thông Báo Desktop -->
-        <button id="desktopNotifyBtn" onclick="requestDesktopNotification()" class="hidden px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold items-center gap-1.5 border border-slate-300">
-          <i data-lucide="bell" class="w-3.5 h-3.5 text-blue-600"></i>
-          <span>Báo ngoài màn hình</span>
+        <button id="wakeLockBtn" onclick="toggleWakeLock()" class="hidden px-2.5 py-2 sm:py-1.5 rounded-xl text-xs font-bold items-center gap-1.5 border bg-slate-100 text-slate-700 border-slate-300" title="Giữ màn hình luôn sáng để không lỡ chuông">
+          <i data-lucide="sun" class="w-4 h-4"></i>
+          <span id="wakeLockText">Giữ sáng: TẮT</span>
         </button>
 
-        <!-- Chuyển Tab Làm việc / Lịch sử -->
+        <button id="desktopNotifyBtn" onclick="requestDesktopNotification()" class="hidden px-2.5 py-2 sm:py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold items-center gap-1.5 border border-slate-300">
+          <i data-lucide="bell-ring" class="w-4 h-4 text-blue-600"></i>
+          <span>Bật thông báo</span>
+        </button>
+
         <div class="bg-slate-100 p-1 rounded-xl flex border border-slate-200">
-          <button id="btnTabActive" onclick="switchMainTab('active')" class="px-3 py-1 bg-white text-blue-700 rounded-lg text-xs font-bold shadow-xs transition">
-            Toa Đang Xử Lý
-          </button>
-          <button id="btnTabHistory" onclick="switchMainTab('history')" class="px-3 py-1 text-slate-600 hover:text-slate-900 rounded-lg text-xs font-bold transition">
-            Lịch Sử (30 ngày)
-          </button>
+          <button id="btnTabActive" onclick="switchMainTab('active')" class="px-3 py-1.5 sm:py-1 rounded-lg text-xs font-bold transition">Đang Xử Lý</button>
+          <button id="btnTabHistory" onclick="switchMainTab('history')" class="px-3 py-1.5 sm:py-1 rounded-lg text-xs font-bold transition">Lịch Sử</button>
         </div>
       </div>
     </div>
   </header>
 
   <nav class="bg-white border-b border-slate-200">
-    <div class="max-w-7xl mx-auto px-3 sm:px-6 py-2">
-      <div class="flex items-center justify-between gap-3 overflow-x-auto custom-scrollbar">
-        <!-- Danh sách các tab nhóm -->
-        <div class="flex items-center gap-1.5 flex-nowrap" id="groupTabsContainer"></div>
-        
-        <!-- Khóa cố định nhóm trên máy hiện tại -->
-        <div class="flex items-center gap-1.5 pl-2 border-l border-slate-200 whitespace-nowrap text-xs">
-          <span class="text-slate-400 font-medium">Ghim máy này:</span>
-          <select id="pinDeviceGroupSelect" onchange="pinDeviceGroup(this.value)" class="text-xs font-bold bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-blue-700 focus:outline-none">
-            <option value="">Xem tất cả các nhóm</option>
-          </select>
-        </div>
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 py-2 flex flex-col sm:flex-row sm:items-center gap-2">
+      <div class="flex items-center gap-1.5 flex-nowrap overflow-x-auto custom-scrollbar pb-1 sm:pb-0 flex-1" id="groupTabsContainer"></div>
+      <div class="flex items-center gap-1.5 sm:pl-2 sm:border-l border-slate-200 whitespace-nowrap text-xs">
+        <button id="pinBtn" onclick="openPinModal()" class="flex-1 sm:flex-none flex items-center justify-center gap-1.5 text-xs font-bold bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg px-3 py-2 sm:py-1.5 text-blue-700">
+          <i data-lucide="pin" class="w-3.5 h-3.5"></i>
+          <span id="pinBtnText">Máy này theo dõi: Tất cả nhóm</span>
+          <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+        </button>
       </div>
     </div>
   </nav>
@@ -127,85 +99,87 @@
   <main class="max-w-7xl mx-auto px-3 sm:px-6 py-4 flex-1 w-full">
 
     <!-- VIEW 1: TOA HÀNG ĐANG XỬ LÝ -->
-    <div id="viewActiveDispatch" class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+    <div id="viewActiveDispatch" class="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5">
 
-      <!-- CỘT TRÁI: KHUNG TẠO TOA GỌI HÀNG -->
-      <section class="lg:col-span-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-3 h-fit">
-        <div class="flex items-center justify-between pb-1 border-b border-slate-100">
+      <!-- CỘT TRÁI: TẠO TOA (trên điện thoại có thể thu gọn) -->
+      <details id="createFormDetails" class="lg:col-span-4 bg-white rounded-2xl shadow-sm border border-slate-200 h-fit" open>
+        <summary class="flex items-center justify-between p-4 pb-3 cursor-pointer lg:cursor-default select-none">
           <h2 class="text-sm font-black text-slate-800 flex items-center gap-1.5">
             <i data-lucide="send" class="w-4 h-4 text-blue-600"></i>
             TẠO TOA GỌI HÀNG
           </h2>
-          <span class="text-[10px] font-bold text-slate-400">Tự do điền</span>
-        </div>
+          <i data-lucide="chevron-down" class="chev w-4 h-4 text-slate-400 transition lg:hidden"></i>
+        </summary>
 
-        <!-- 1. Điền Tên Nhóm Zalo -->
-        <div>
-          <label class="text-[11px] font-bold text-slate-600 uppercase block mb-1">Tên Nhóm Gửi Đến (Tự Gõ Hoặc Chọn):</label>
-          <input list="suggestedGroups" id="inputGroupName" placeholder="Nhập tên nhóm Zalo nhận toa..." class="w-full text-xs font-bold p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none" />
-          <datalist id="suggestedGroups"></datalist>
-        </div>
+        <div class="px-4 pb-4 flex flex-col gap-3 border-t border-slate-100 pt-3">
+          <div>
+            <label for="inputGroupName" class="text-[11px] font-bold text-slate-600 uppercase block mb-1">Tên Nhóm Gửi Đến (Tự Gõ Hoặc Chọn):</label>
+            <input list="suggestedGroups" id="inputGroupName" autocomplete="off" placeholder="Nhập tên nhóm Zalo nhận toa..." class="w-full text-base sm:text-xs font-bold p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+            <datalist id="suggestedGroups"></datalist>
+          </div>
 
-        <!-- 2. Điền Tên Trưởng Nhóm phụ trách -->
-        <div>
-          <label class="text-[11px] font-bold text-slate-600 uppercase block mb-1">Trưởng Nhóm Phụ Trách (Tự Gõ Tên):</label>
-          <input list="suggestedLeaders" id="inputLeaderName" placeholder="Ví dụ: Việt, Khánh, Danh..." class="w-full text-xs font-bold p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none" />
-          <datalist id="suggestedLeaders"></datalist>
-        </div>
+          <div>
+            <label for="inputLeaderName" class="text-[11px] font-bold text-slate-600 uppercase block mb-1">Trưởng Nhóm Phụ Trách:</label>
+            <input list="suggestedLeaders" id="inputLeaderName" autocomplete="off" placeholder="Ví dụ: Việt, Khánh, Danh..." class="w-full text-base sm:text-xs font-bold p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+            <datalist id="suggestedLeaders"></datalist>
+          </div>
 
-        <!-- 3. Khu vực Dán Ảnh Chụp Kiot (Ctrl + V) -->
-        <div id="dropPasteZone" onclick="document.getElementById('fileImageChooser').click()" class="border-2 border-dashed border-blue-300 hover:border-blue-500 bg-blue-50/50 rounded-2xl p-4 text-center cursor-pointer transition flex flex-col items-center justify-center min-h-[140px] relative group" tabindex="0">
-          <input type="file" id="fileImageChooser" accept="image/*" class="hidden" onchange="onFileImagePicked(event)">
-          
-          <div id="pasteHintContent" class="flex flex-col items-center pointer-events-none">
-            <div class="w-9 h-9 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mb-1 group-hover:scale-110 transition">
-              <i data-lucide="image" class="w-5 h-5"></i>
+          <!-- Ảnh Kiot: máy tính dán Ctrl+V, điện thoại chụp hoặc chọn ảnh -->
+          <div id="dropPasteZone" class="border-2 border-dashed border-blue-300 bg-blue-50/50 rounded-2xl p-3 text-center transition flex flex-col items-center justify-center min-h-[130px] relative">
+            <input type="file" id="fileImageChooser" accept="image/*" class="hidden" onchange="onFileImagePicked(event)">
+            <input type="file" id="fileCameraChooser" accept="image/*" capture="environment" class="hidden" onchange="onFileImagePicked(event)">
+
+            <div id="pasteHintContent" class="flex flex-col items-center w-full gap-2">
+              <p class="text-xs font-black text-blue-700 hidden lg:block">Chụp màn hình Kiot rồi bấm Ctrl + V</p>
+              <div class="grid grid-cols-2 gap-2 w-full">
+                <button type="button" onclick="document.getElementById('fileCameraChooser').click()" class="flex flex-col items-center justify-center gap-1 bg-white border border-blue-200 hover:border-blue-500 rounded-xl py-3 text-xs font-bold text-blue-700 active:scale-[0.97] transition">
+                  <i data-lucide="camera" class="w-5 h-5"></i> Chụp ảnh
+                </button>
+                <button type="button" onclick="document.getElementById('fileImageChooser').click()" class="flex flex-col items-center justify-center gap-1 bg-white border border-blue-200 hover:border-blue-500 rounded-xl py-3 text-xs font-bold text-blue-700 active:scale-[0.97] transition">
+                  <i data-lucide="image" class="w-5 h-5"></i> Chọn ảnh
+                </button>
+              </div>
+              <p class="text-[11px] text-slate-500">Ảnh tự nén nhẹ (&lt;80KB)</p>
             </div>
-            <p class="text-xs font-black text-blue-700">Chụp Kiot & bấm Ctrl + V vào đây</p>
-            <p class="text-[11px] text-slate-500 mt-0.5">hoặc bấm để chọn ảnh (tự nén siêu nhẹ &lt;80KB)</p>
+
+            <div id="imagePreviewContainer" class="hidden relative w-full flex justify-center">
+              <img id="compressedImagePreview" class="max-h-36 rounded-xl shadow-md object-contain border border-slate-200" alt="Ảnh Kiot">
+              <button type="button" onclick="removeCapturedImage(event)" class="absolute -top-2 right-0 bg-rose-600 hover:bg-rose-700 text-white rounded-full p-1.5 shadow transition" aria-label="Xóa ảnh">
+                <i data-lucide="x" class="w-4 h-4"></i>
+              </button>
+              <span id="imageSizeLabel" class="absolute bottom-1 left-1 text-[10px] bg-black/60 text-white px-1.5 rounded"></span>
+            </div>
           </div>
 
-          <!-- Khung Preview Ảnh Sau Khi Nén -->
-          <div id="imagePreviewContainer" class="hidden relative w-full flex justify-center">
-            <img id="compressedImagePreview" class="max-h-36 rounded-xl shadow-md object-contain border border-slate-200" alt="Ảnh Kiot">
-            <button onclick="removeCapturedImage(event)" class="absolute -top-2 -right-2 bg-rose-600 hover:bg-rose-700 text-white rounded-full p-1 shadow transition">
-              <i data-lucide="x" class="w-3.5 h-3.5"></i>
-            </button>
+          <div>
+            <label for="inputOrderNote" class="text-[11px] font-bold text-slate-600 uppercase block mb-1">Ghi chú thêm mã / số lượng:</label>
+            <textarea id="inputOrderNote" rows="3" placeholder="Ví dụ: Giao gấp ra quầy 2 cái..." class="w-full text-base sm:text-xs p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"></textarea>
           </div>
+
+          <button id="btnSubmitOrder" onclick="submitNewOrder()" class="w-full bg-blue-600 hover:bg-blue-700 active:scale-[0.98] disabled:opacity-60 text-white font-black py-3.5 sm:py-3 rounded-xl shadow-md text-sm flex items-center justify-center gap-2 transition tracking-wide">
+            <i data-lucide="send" class="w-4 h-4"></i>
+            <span>GỬI LỆNH GỌI HÀNG NGAY</span>
+          </button>
         </div>
+      </details>
 
-        <!-- 4. Ghi chú nhanh -->
-        <div>
-          <label class="text-[11px] font-bold text-slate-600 uppercase block mb-1">Ghi chú thêm mã / số lượng:</label>
-          <textarea id="inputOrderNote" rows="3" placeholder="Ví dụ: Giao gấp ra quầy 2 cái..." class="w-full text-xs p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"></textarea>
-        </div>
-
-        <!-- 5. Nút Gửi Lệnh -->
-        <button id="btnSubmitOrder" onclick="submitNewOrder()" class="w-full bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-black py-3 rounded-xl shadow-md text-sm flex items-center justify-center gap-2 transition tracking-wide">
-          <i data-lucide="send" class="w-4 h-4"></i>
-          GỬI LỆNH GỌI HÀNG NGAY
-        </button>
-      </section>
-
-      <!-- CỘT PHẢI: DANH SÁCH TOA HÀNG ĐANG XỬ LÝ -->
+      <!-- CỘT PHẢI: DANH SÁCH TOA -->
       <section class="lg:col-span-8 flex flex-col gap-3">
-        <div class="flex items-center justify-between bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
+        <div class="flex flex-wrap items-center justify-between gap-2 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
           <div class="flex items-center gap-2">
-            <h2 class="text-sm font-black text-slate-900">DANH SÁCH TOA ĐANG XỬ LÝ</h2>
+            <h2 class="text-sm font-black text-slate-900">TOA ĐANG XỬ LÝ</h2>
             <span id="liveOrdersBadgeCount" class="bg-blue-600 text-white text-xs px-2.5 py-0.5 rounded-full font-black">0</span>
           </div>
-          <div class="text-[11px] text-slate-500 flex items-center gap-3 font-medium">
-            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span> Chờ nhận (&le;60s)</span>
-            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span> Quá hạn (&gt;60s)</span>
+          <div class="text-[11px] text-slate-500 flex flex-wrap items-center gap-x-3 gap-y-1 font-medium">
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span> Chờ nhận (&lt;60s)</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Quá hạn</span>
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Đang soạn</span>
           </div>
         </div>
 
-        <!-- Lưới các thẻ toa hàng -->
-        <div id="liveOrderCardsGrid" class="grid grid-cols-1 md:grid-cols-2 gap-3.5 min-h-[300px]"></div>
+        <div id="liveOrderCardsGrid" class="grid grid-cols-1 md:grid-cols-2 gap-3.5"></div>
 
-        <!-- Trạng thái trống -->
-        <div id="liveOrdersEmptyPrompt" class="hidden text-center py-20 bg-white rounded-2xl border border-dashed border-slate-300 p-6">
+        <div id="liveOrdersEmptyPrompt" class="hidden text-center py-16 bg-white rounded-2xl border border-dashed border-slate-300 p-6">
           <div class="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3">
             <i data-lucide="check-check" class="w-8 h-8"></i>
           </div>
@@ -213,23 +187,24 @@
           <p class="text-xs text-slate-400 mt-1">Toàn bộ các toa gọi hàng trong nhóm đã được nhận và hoàn thành.</p>
         </div>
       </section>
-
     </div>
 
-    <!-- VIEW 2: LỊCH SỬ ĐỐI SOÁT (30 NGÀY) -->
-    <div id="viewHistoryArchive" class="hidden bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-4">
+    <!-- VIEW 2: LỊCH SỬ (30 NGÀY) -->
+    <div id="viewHistoryArchive" class="hidden bg-white p-3 sm:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-4">
       <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
         <div>
           <h2 class="text-base font-black text-slate-800">LỊCH SỬ ĐỐI SOÁT TOA HÀNG</h2>
-          <p class="text-xs text-slate-500">Lưu lại ảnh Kiot, giờ nhận và người chịu trách nhiệm (Tự xóa sau 30 ngày)</p>
+          <p class="text-xs text-slate-500">Ảnh Kiot, giờ nhận và người chịu trách nhiệm (tự xóa sau 30 ngày)</p>
         </div>
-        <div class="flex items-center gap-2 flex-wrap">
-          <input type="date" id="historyDateFilterInput" onchange="renderHistoryTable()" class="text-xs p-1.5 border border-slate-300 rounded-lg bg-slate-50 font-bold">
-        </div>
+        <input type="date" id="historyDateFilterInput" onchange="renderHistoryTable()" class="text-base sm:text-xs p-1.5 border border-slate-300 rounded-lg bg-slate-50 font-bold">
       </div>
 
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-xs text-slate-600 min-w-[700px]">
+      <!-- Điện thoại: dạng thẻ -->
+      <div id="historyCardsMobile" class="flex flex-col gap-2.5 md:hidden"></div>
+
+      <!-- Máy tính: dạng bảng -->
+      <div class="overflow-x-auto hidden md:block">
+        <table class="w-full text-left text-xs text-slate-600 min-w-[760px]">
           <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] font-black border-y border-slate-200">
             <tr>
               <th class="p-3">Toa & Nhóm Zalo</th>
@@ -244,63 +219,111 @@
           <tbody id="historyTableRecordsBody" class="divide-y divide-slate-100 font-medium"></tbody>
         </table>
       </div>
-      
+
       <div id="historyEmptyPrompt" class="hidden text-center py-12 text-slate-400 text-xs">
         Không có toa hàng nào hoàn thành trong ngày đã chọn.
       </div>
     </div>
-
   </main>
 
-  <!-- MODAL: Phóng to xem chi tiết ảnh Kiot -->
-  <div id="modalImageViewer" class="fixed inset-0 bg-black/85 z-50 hidden flex items-center justify-center p-4" onclick="closeImageViewerModal()">
+  <!-- MODAL: Xem ảnh Kiot -->
+  <div id="modalImageViewer" class="fixed inset-0 bg-black/85 z-50 hidden items-center justify-center p-3" onclick="closeImageViewerModal()">
     <div class="relative max-w-4xl max-h-[92vh] flex flex-col items-center" onclick="event.stopPropagation()">
-      <img id="viewerImageElement" src="" alt="Ảnh Kiot" class="max-w-full max-h-[85vh] rounded-xl shadow-2xl object-contain border border-slate-700">
-      <button onclick="closeImageViewerModal()" class="absolute -top-3 -right-3 bg-white text-slate-800 rounded-full p-1.5 shadow-lg hover:bg-slate-200">
+      <img id="viewerImageElement" src="" alt="Ảnh Kiot" class="max-w-full max-h-[85vh] rounded-xl shadow-2xl object-contain border border-slate-700 bg-white">
+      <button onclick="closeImageViewerModal()" class="absolute -top-3 -right-1 bg-white text-slate-800 rounded-full p-2 shadow-lg hover:bg-slate-200" aria-label="Đóng">
         <i data-lucide="x" class="w-5 h-5"></i>
       </button>
     </div>
   </div>
 
-  <!-- MODAL: Thêm / Sửa / Xóa Nhóm Zalo -->
-  <div id="modalEditGroup" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl flex flex-col gap-3">
+  <!-- MODAL: Thêm / Sửa / Xóa Nhóm -->
+  <div id="modalEditGroup" class="fixed inset-0 bg-black/60 z-50 hidden items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-white rounded-t-2xl sm:rounded-2xl max-w-md w-full p-5 shadow-2xl flex flex-col gap-3">
       <div class="flex items-center justify-between pb-2 border-b border-slate-100">
-        <h3 id="modalEditGroupTitle" class="text-sm font-black text-slate-800 flex items-center gap-2">
-          <i data-lucide="folder-plus" class="w-4 h-4 text-blue-600"></i>
-          <span>Thêm Nhóm Zalo Mới</span>
-        </h3>
-        <button onclick="closeEditGroupModal()" class="text-slate-400 hover:text-slate-700"><i data-lucide="x" class="w-4 h-4"></i></button>
+        <h3 id="modalEditGroupTitle" class="text-sm font-black text-slate-800">Thêm Nhóm Zalo Mới</h3>
+        <button onclick="closeEditGroupModal()" class="text-slate-400 hover:text-slate-700 p-1" aria-label="Đóng"><i data-lucide="x" class="w-5 h-5"></i></button>
       </div>
 
       <input type="hidden" id="editGroupOriginalName" value="">
 
       <div>
-        <label class="text-[11px] font-bold text-slate-600 uppercase block mb-1">Tên Nhóm Zalo:</label>
-        <input type="text" id="editGroupNameInput" placeholder="Ví dụ: Zalo Kho Lớn, Zalo Quầy Bán Lẻ..." class="w-full text-xs font-bold p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        <label for="editGroupNameInput" class="text-[11px] font-bold text-slate-600 uppercase block mb-1">Tên Nhóm Zalo:</label>
+        <input type="text" id="editGroupNameInput" placeholder="Ví dụ: Zalo Kho Lớn, Zalo Quầy Bán Lẻ..." class="w-full text-base sm:text-xs font-bold p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
       </div>
 
       <div>
-        <label class="text-[11px] font-bold text-slate-600 uppercase block mb-1">Trưởng Nhóm Mặc Định Phụ Trách:</label>
-        <input type="text" id="editGroupLeaderInput" placeholder="Ví dụ: Việt, Khánh, Danh..." class="w-full text-xs font-bold p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        <label for="editGroupLeaderInput" class="text-[11px] font-bold text-slate-600 uppercase block mb-1">Trưởng Nhóm Mặc Định:</label>
+        <input type="text" id="editGroupLeaderInput" placeholder="Ví dụ: Việt, Khánh, Danh..." class="w-full text-base sm:text-xs font-bold p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
       </div>
 
-      <div class="flex items-center justify-between pt-2 border-t border-slate-100 mt-2">
-        <button id="btnDeleteGroupModal" onclick="deleteCurrentGroup()" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-xl transition flex items-center gap-1">
+      <div class="flex items-center justify-between pt-3 border-t border-slate-100 mt-1">
+        <button id="btnDeleteGroupModal" onclick="deleteCurrentGroup()" class="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-xl transition flex items-center gap-1">
           <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
           <span>Xóa nhóm</span>
         </button>
         <div class="flex items-center gap-2">
-          <button onclick="closeEditGroupModal()" class="px-3 py-1.5 text-slate-500 hover:text-slate-700 text-xs font-bold">Hủy</button>
-          <button onclick="saveGroupDetails()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-xs transition">Lưu Nhóm</button>
+          <button onclick="closeEditGroupModal()" class="px-3 py-2 text-slate-500 hover:text-slate-700 text-xs font-bold">Hủy</button>
+          <button onclick="saveGroupDetails()" class="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl transition">Lưu Nhóm</button>
         </div>
       </div>
     </div>
   </div>
 
+  <datalist id="suggestedStaffs"></datalist>
+
+  <!-- MODAL: Chọn các nhóm máy này theo dõi -->
+  <div id="modalPinGroups" class="fixed inset-0 bg-black/60 z-50 hidden items-end sm:items-center justify-center p-0 sm:p-4" onclick="closePinModal()">
+    <div class="bg-white rounded-t-2xl sm:rounded-2xl max-w-md w-full p-5 shadow-2xl flex flex-col gap-3 max-h-[85vh]" onclick="event.stopPropagation()">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+        <h3 class="text-sm font-black text-slate-800">Máy này theo dõi nhóm nào?</h3>
+        <button onclick="closePinModal()" class="text-slate-400 hover:text-slate-700 p-1" aria-label="Đóng"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <p class="text-[11px] text-slate-500">Máy chỉ đổ chuông, rung và hiện toa của các nhóm được chọn. Không chọn nhóm nào = theo dõi tất cả.</p>
+      <div id="pinGroupList" class="flex flex-col gap-1.5 overflow-y-auto"></div>
+      <div class="flex items-center justify-between pt-3 border-t border-slate-100">
+        <button onclick="setAllPinChecks(false)" class="px-3 py-2 text-slate-500 hover:text-slate-700 text-xs font-bold">Bỏ chọn hết</button>
+        <button onclick="savePinModal()" class="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl transition">Lưu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MÀN HÌNH NHẬP MÃ CỬA HÀNG (chỉ hiện 1 lần trên mỗi máy) -->
+  <div id="accessGate" class="fixed inset-0 z-[60] bg-slate-100 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-sm w-full p-6 flex flex-col gap-4 text-center">
+      <div class="mx-auto bg-gradient-to-tr from-blue-700 to-blue-500 text-white p-3 rounded-2xl shadow-md">
+        <i data-lucide="lock" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <h2 class="text-base font-black text-slate-900">ĐIỀU PHỐI GỌI HÀNG</h2>
+        <p id="gateMessage" class="text-xs text-slate-500 mt-1">Đang kết nối...</p>
+      </div>
+      <form id="gateForm" class="hidden flex-col gap-3" onsubmit="submitJoinCode(event)">
+        <input id="joinCodeInput" type="password" autocomplete="current-password" placeholder="Nhập mã cửa hàng"
+          class="w-full text-base text-center font-bold tracking-widest p-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        <button id="joinCodeBtn" type="submit" class="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-black py-3 rounded-xl text-sm transition">VÀO HỆ THỐNG</button>
+        <p id="gateError" class="hidden text-xs font-bold text-rose-600"></p>
+        <p class="text-[11px] text-slate-400">Hỏi quản lý để lấy mã. Mỗi máy chỉ cần nhập một lần.</p>
+        <button type="button" onclick="toggleSetupForm(true)" class="text-[11px] font-bold text-blue-600 underline">Lần đầu cài đặt? Tạo mã cửa hàng</button>
+      </form>
+
+      <!-- Tạo mã cửa hàng lần đầu (chỉ làm được 1 lần, khi chưa có mã) -->
+      <form id="setupForm" class="hidden flex-col gap-3" onsubmit="submitCreateCode(event)">
+        <p class="text-xs font-bold text-slate-700">Tạo mã cửa hàng (dành cho quản lý)</p>
+        <input id="newCodeInput" type="password" autocomplete="new-password" placeholder="Mã mới (ít nhất 6 ký tự)"
+          class="w-full text-base text-center font-bold tracking-widest p-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        <input id="newCodeInput2" type="password" autocomplete="new-password" placeholder="Nhập lại mã"
+          class="w-full text-base text-center font-bold tracking-widest p-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        <button id="createCodeBtn" type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-black py-3 rounded-xl text-sm transition">TẠO MÃ & VÀO</button>
+        <p id="setupError" class="hidden text-xs font-bold text-rose-600"></p>
+        <p class="text-[11px] text-slate-400">Nên dùng cả chữ và số. Ghi lại mã để đưa cho nhân viên.</p>
+        <button type="button" onclick="toggleSetupForm(false)" class="text-[11px] font-bold text-slate-500 underline">← Quay lại nhập mã</button>
+      </form>
+    </div>
+  </div>
+
   <script>
     /* =========================================================
-       1. CẤU HÌNH & KẾT NỐI FIREBASE REALTIME DATABASE
+       1. CẤU HÌNH FIREBASE
        ========================================================= */
     const firebaseConfig = {
       apiKey: "AIzaSyAuuJm7zuzhmMqEj22ofmiXvTLsssXRV20",
@@ -316,63 +339,135 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
     const ordersRef = db.ref('orders');
+    const imagesRef = db.ref('orderImages');   // Ảnh tách riêng => danh sách toa tải nhanh, đỡ tốn 4G
     const groupsRef = db.ref('groups');
     const staffsRef = db.ref('staffs');
 
-    /* DỮ LIỆU ĐỊA PHƯƠNG ĐỒNG BỘ */
+    const DEADLINE_SEC = 60;
+    const KEEP_DAYS = 30;
+    const DAY_MS = 24 * 60 * 60 * 1000;
+
+    /* =========================================================
+       2. TRẠNG THÁI
+       ========================================================= */
     let configuredGroups = [];
     let knownStaffs = [];
     let orders = [];
+    let serverTimeOffset = 0;          // Bù lệch giờ giữa các máy
+    let ordersLoadedOnce = false;
+    let seenOrderIds = new Set();
+    let notifiedOverdueIds = new Set();
+    const imageCache = {};             // id -> base64
+    const imageLoading = {};
 
-    let activeFilterGroup = "ALL";
-    let pinnedDeviceGroup = localStorage.getItem('app_pinned_group') || "";
-    let isSoundAlertEnabled = localStorage.getItem('app_sound_enabled') !== 'false';
+    const storage = {
+      get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+      set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+      del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+    };
+
+    // Danh sách nhóm máy này theo dõi (rỗng = tất cả). Tự chuyển từ kiểu ghim 1 nhóm cũ.
+    let pinnedGroups = (() => {
+      try { const v = JSON.parse(storage.get('app_pinned_groups') || 'null'); if (Array.isArray(v)) return v; } catch (e) {}
+      const old = storage.get('app_pinned_group');
+      return old ? [old] : [];
+    })();
+    let activeFilterGroup = "ALL";   // "ALL" = mọi nhóm máy này theo dõi
+
+    function savePinnedGroups() {
+      storage.set('app_pinned_groups', JSON.stringify(pinnedGroups));
+      storage.del('app_pinned_group');
+    }
+    // Toa có hiện trong danh sách đang xem không
+    function inView(name) {
+      if (activeFilterGroup !== 'ALL') return name === activeFilterGroup;
+      return pinnedGroups.length === 0 || pinnedGroups.includes(name);
+    }
+    // Toa có làm máy này đổ chuông không: luôn theo các nhóm đã chọn, dù đang xem tab nào
+    function inAlarm(name) {
+      if (pinnedGroups.length) return pinnedGroups.includes(name);
+      return activeFilterGroup === 'ALL' || name === activeFilterGroup;
+    }
+    let isSoundAlertEnabled = storage.get('app_sound_enabled') !== 'false';
     let tempCapturedImageBase64 = null;
+    let currentMainTab = 'active';
 
-    // Âm thanh báo động
     let audioCtx = null;
     let alarmTimerInterval = null;
-    let isAlarmRunning = false;
-    let originalHtmlTitle = document.title;
+    const originalHtmlTitle = document.title;
     let titleBlinkInterval = null;
+    let wakeLock = null;
+    let wantWakeLock = storage.get('app_wake_lock') === 'true';
 
-    function initAudioContext() {
-      if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      }
-      if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
-      }
+    const nowServer = () => Date.now() + serverTimeOffset;
+
+    /* =========================================================
+       3. TIỆN ÍCH
+       ========================================================= */
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
+
+    function fmtTime(ts) {
+      if (!ts) return '—';
+      return new Date(ts).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    function fmtDuration(ms) {
+      if (ms == null || ms < 0) return '—';
+      const s = Math.round(ms / 1000);
+      if (s < 60) return s + 's';
+      const m = Math.floor(s / 60);
+      return m + 'p' + String(s % 60).padStart(2, '0') + 's';
+    }
+
+    function localDateKey(ts) {
+      const d = new Date(ts);
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+
+    function refreshIcons() { if (window.lucide) lucide.createIcons(); }
+
+    /* =========================================================
+       4. ÂM THANH, RUNG, THÔNG BÁO, GIỮ MÀN HÌNH SÁNG
+       ========================================================= */
+    function initAudioContext() {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+      } catch (e) { /* trình duyệt không hỗ trợ */ }
+    }
+    // Điện thoại chỉ cho phát âm thanh sau khi người dùng chạm màn hình => mở khóa ở lần chạm đầu tiên
+    ['pointerdown', 'touchend', 'keydown'].forEach(ev =>
+      document.addEventListener(ev, initAudioContext, { passive: true })
+    );
 
     function toggleSound() {
       initAudioContext();
       isSoundAlertEnabled = !isSoundAlertEnabled;
-      localStorage.setItem('app_sound_enabled', isSoundAlertEnabled);
+      storage.set('app_sound_enabled', isSoundAlertEnabled);
       renderSoundUI();
-      if (isSoundAlertEnabled) {
-        playBeepNote(880, 0.15);
-      } else {
-        stopAlarmSystem();
-      }
+      if (isSoundAlertEnabled) playBeepNote(880, 0.15);
+      else stopAlarmSystem();
     }
 
     function renderSoundUI() {
       const btn = document.getElementById('soundToggleBtn');
       const text = document.getElementById('soundText');
+      const base = "px-2.5 py-2 sm:py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border ";
       if (isSoundAlertEnabled) {
-        btn.className = "px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-300 shadow-xs";
+        btn.className = base + "bg-emerald-50 text-emerald-700 border-emerald-300";
         text.innerText = "Chuông: BẬT";
       } else {
-        btn.className = "px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-rose-50 text-rose-700 border border-rose-300 shadow-xs";
-        text.innerText = "Chuông: ĐÃ TẮT";
+        btn.className = base + "bg-rose-50 text-rose-700 border-rose-300";
+        text.innerText = "Chuông: TẮT";
       }
-      lucide.createIcons();
     }
 
     function playBeepNote(freq = 900, duration = 0.15) {
-      if (!isSoundAlertEnabled) return;
-      initAudioContext();
+      if (!isSoundAlertEnabled || !audioCtx || audioCtx.state !== 'running') return;
       try {
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
@@ -384,26 +479,30 @@
         gain.connect(audioCtx.destination);
         osc.start();
         osc.stop(audioCtx.currentTime + duration);
-      } catch (e) {
-        console.warn("Audio blocked:", e);
-      }
+      } catch (e) { console.warn("Audio blocked:", e); }
+    }
+
+    function vibrate(pattern) {
+      try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) {}
+    }
+
+    function playNewOrderDing() {
+      playBeepNote(1046, 0.12);
+      setTimeout(() => playBeepNote(1318, 0.18), 150);
+      vibrate([150, 80, 150]);
     }
 
     function startAlarmSystem() {
-      if (isAlarmRunning || !isSoundAlertEnabled) return;
-      isAlarmRunning = true;
+      if (alarmTimerInterval || !isSoundAlertEnabled) return;
       alarmTimerInterval = setInterval(() => {
         playBeepNote(960, 0.12);
         setTimeout(() => playBeepNote(740, 0.12), 140);
+        vibrate(300);
       }, 750);
     }
 
     function stopAlarmSystem() {
-      if (alarmTimerInterval) {
-        clearInterval(alarmTimerInterval);
-        alarmTimerInterval = null;
-      }
-      isAlarmRunning = false;
+      if (alarmTimerInterval) { clearInterval(alarmTimerInterval); alarmTimerInterval = null; }
     }
 
     function startTabBlinking() {
@@ -423,55 +522,926 @@
       }
     }
 
+    function updateNotifyButton() {
+      const btn = document.getElementById('desktopNotifyBtn');
+      const show = ("Notification" in window) && Notification.permission === 'default';
+      btn.classList.toggle('hidden', !show);
+      btn.classList.toggle('flex', show);
+    }
+
     function requestDesktopNotification() {
-      if ("Notification" in window) {
-        Notification.requestPermission().then(permission => {
-          if (permission === "granted") {
-            document.getElementById('desktopNotifyBtn').classList.add('hidden');
-          }
-        });
+      if (!("Notification" in window)) return;
+      Notification.requestPermission().then(updateNotifyButton);
+    }
+
+    function showSystemNotification(title, body) {
+      if (!("Notification" in window) || Notification.permission !== 'granted') return;
+      try {
+        const n = new Notification(title, { body, tag: 'goi-hang', renotify: true });
+        n.onclick = () => { window.focus(); n.close(); };
+      } catch (e) {
+        // Chrome Android không cho tạo thông báo kiểu này nếu không có Service Worker → bỏ qua, vẫn còn chuông + rung
       }
     }
 
+    async function requestWakeLock() {
+      if (!('wakeLock' in navigator)) return;
+      try {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; renderWakeLockUI(); });
+      } catch (e) { wakeLock = null; }
+      renderWakeLockUI();
+    }
+
+    function toggleWakeLock() {
+      wantWakeLock = !wantWakeLock;
+      storage.set('app_wake_lock', wantWakeLock);
+      if (wantWakeLock) requestWakeLock();
+      else if (wakeLock) wakeLock.release();
+      renderWakeLockUI();
+    }
+
+    function renderWakeLockUI() {
+      const btn = document.getElementById('wakeLockBtn');
+      if (!('wakeLock' in navigator)) return;
+      btn.classList.remove('hidden');
+      btn.classList.add('flex');
+      const on = wantWakeLock && wakeLock;
+      btn.className = "px-2.5 py-2 sm:py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border " +
+        (on ? "bg-amber-50 text-amber-700 border-amber-300" : "bg-slate-100 text-slate-700 border-slate-300");
+      document.getElementById('wakeLockText').innerText = on ? "Giữ sáng: BẬT" : "Giữ sáng: TẮT";
+    }
+
+    // Màn hình tắt rồi mở lại thì xin giữ sáng lại
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        initAudioContext();
+        if (wantWakeLock && !wakeLock) requestWakeLock();
+        evaluateTimersAndAlerts();
+      }
+    });
+
     /* =========================================================
-       2. LẮNG NGHE DỮ LIỆU REALTIME TỪ CLOUD (TỰ ĐỘNG CẬP NHẬT MỌI MÁY)
+       5. ĐỒNG BỘ REALTIME
        ========================================================= */
+    let infoListenersOn = false;
     function subscribeToFirebase() {
-      // 1. Đồng bộ Toa Hàng
-      ordersRef.on('value', (snapshot) => {
-        const val = snapshot.val();
-        if (val) {
-          orders = Object.keys(val).map(key => ({
-            id: key,
-            ...val[key]
-          })).sort((a, b) => b.createdAt - a.createdAt);
-        } else {
-          orders = [];
-        }
-        renderAll();
-      });
+      if (!infoListenersOn) { infoListenersOn = true; subscribeInfo(); }
+      subscribeData();
+    }
 
-      // 2. Đồng bộ Danh sách Nhóm
-      groupsRef.on('value', (snapshot) => {
-        const val = snapshot.val();
-        if (val) {
-          configuredGroups = Array.isArray(val) ? val : Object.values(val);
-        } else {
-          configuredGroups = [];
-        }
-        renderAll();
-      });
+    function subscribeInfo() {
+      db.ref('.info/serverTimeOffset').on('value', snap => { serverTimeOffset = snap.val() || 0; });
 
-      // 3. Đồng bộ Danh sách Nhân viên
-      staffsRef.on('value', (snapshot) => {
-        const val = snapshot.val();
-        if (val) {
-          knownStaffs = Array.isArray(val) ? val : Object.values(val);
+      db.ref('.info/connected').on('value', snap => {
+        const badge = document.getElementById('cloudStatusBadge');
+        if (snap.val() === true) {
+          badge.className = "text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 border border-emerald-200";
+          badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Đồng bộ Cloud';
         } else {
-          knownStaffs = [];
+          badge.className = "text-[10px] bg-rose-100 text-rose-800 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 border border-rose-200";
+          badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Mất kết nối';
         }
-        renderSuggestionDatalists();
       });
     }
 
-    /* DÁN ẢNH KIOT SIÊU NHANH BẰNG CTRL+V & N
+    function subscribeData() {
+      // Chỉ tải toa trong 30 ngày gần nhất
+      const since = Date.now() - KEEP_DAYS * DAY_MS;
+      ordersRef.orderByChild('createdAt').startAt(since).on('value', (snapshot) => {
+        const val = snapshot.val() || {};
+        orders = Object.keys(val).map(key => ({ id: key, ...val[key] }))
+          .filter(o => o && typeof o.createdAt === 'number')
+          .sort((a, b) => b.createdAt - a.createdAt);
+
+        detectNewOrders();
+        renderAll();
+      }, onListenError);
+
+      groupsRef.on('value', (snapshot) => {
+        const val = snapshot.val();
+        configuredGroups = (val ? (Array.isArray(val) ? val : Object.values(val)) : [])
+          .filter(g => g && g.name);
+        renderAll();
+      }, onListenError);
+
+      staffsRef.on('value', (snapshot) => {
+        const val = snapshot.val();
+        knownStaffs = (val ? (Array.isArray(val) ? val : Object.values(val)) : []).filter(Boolean);
+        renderSuggestionDatalists();
+      }, onListenError);
+    }
+
+    // Bị từ chối quyền (ví dụ quản lý vừa đổi mã) → quay về màn hình nhập mã
+    function onListenError(err) {
+      ordersRef.off(); groupsRef.off(); staffsRef.off();
+      showGate("Mã cửa hàng đã thay đổi hoặc máy chưa được cấp quyền. Vui lòng nhập mã mới.");
+    }
+
+    /* =========================================================
+       5b. BẢO MẬT: ĐĂNG NHẬP ẨN DANH + MÃ CỬA HÀNG
+       ========================================================= */
+    let appStarted = false;
+
+    function showGate(message) {
+      appStarted = false;
+      stopAlarmSystem();
+      document.getElementById('accessGate').classList.remove('hidden');
+      document.getElementById('gateMessage').innerText = message;
+      const form = document.getElementById('gateForm');
+      form.classList.remove('hidden');
+      form.classList.add('flex');
+      document.getElementById('joinCodeBtn').disabled = false;
+      refreshIcons();
+    }
+
+    function hideGate() {
+      document.getElementById('accessGate').classList.add('hidden');
+    }
+
+    function startApp() {
+      if (appStarted) return;
+      appStarted = true;
+      hideGate();
+      subscribeToFirebase();
+      cleanupOldOrders();
+    }
+
+    // Thử đọc dữ liệu: đọc được nghĩa là máy này đã là thành viên
+    function checkMembership() {
+      return groupsRef.once('value').then(() => true).catch(() => false);
+    }
+
+    function submitJoinCode(e) {
+      e.preventDefault();
+      const code = document.getElementById('joinCodeInput').value.trim();
+      const errEl = document.getElementById('gateError');
+      errEl.classList.add('hidden');
+      if (!code) return;
+      const user = firebase.auth().currentUser;
+      if (!user) { errEl.innerText = "Chưa kết nối được máy chủ, thử lại sau giây lát."; errEl.classList.remove('hidden'); return; }
+
+      const btn = document.getElementById('joinCodeBtn');
+      btn.disabled = true;
+      db.ref('members/' + user.uid).set(code)
+        .then(() => { document.getElementById('joinCodeInput').value = ''; startApp(); })
+        .catch(() => {
+          errEl.innerText = "Mã không đúng. Vui lòng kiểm tra lại.";
+          errEl.classList.remove('hidden');
+        })
+        .finally(() => { btn.disabled = false; });
+    }
+
+    function toggleSetupForm(show) {
+      const join = document.getElementById('gateForm');
+      const setup = document.getElementById('setupForm');
+      join.classList.toggle('hidden', show); join.classList.toggle('flex', !show);
+      setup.classList.toggle('hidden', !show); setup.classList.toggle('flex', show);
+      document.getElementById('setupError').classList.add('hidden');
+    }
+
+    function submitCreateCode(e) {
+      e.preventDefault();
+      const code = document.getElementById('newCodeInput').value.trim();
+      const code2 = document.getElementById('newCodeInput2').value.trim();
+      const errEl = document.getElementById('setupError');
+      const fail = (msg) => { errEl.innerText = msg; errEl.classList.remove('hidden'); };
+      errEl.classList.add('hidden');
+
+      if (code.length < 6) return fail("Mã phải có ít nhất 6 ký tự.");
+      if (code !== code2) return fail("Hai lần nhập mã không giống nhau.");
+      const user = firebase.auth().currentUser;
+      if (!user) return fail("Chưa kết nối được máy chủ, thử lại sau giây lát.");
+
+      const btn = document.getElementById('createCodeBtn');
+      btn.disabled = true;
+      db.ref('secret/joinCode').set(code)
+        .then(() => db.ref('members/' + user.uid).set(code))
+        .then(() => {
+          document.getElementById('newCodeInput').value = '';
+          document.getElementById('newCodeInput2').value = '';
+          toggleSetupForm(false);
+          startApp();
+          setTimeout(() => alert("Đã tạo mã cửa hàng. Hãy ghi lại mã để đưa cho nhân viên."), 300);
+        })
+        .catch(() => fail("Cửa hàng đã có mã rồi (hoặc chưa dán Rules). Hãy hỏi người quản lý để lấy mã."))
+        .finally(() => { btn.disabled = false; });
+    }
+
+    function initAuth() {
+      firebase.auth().onAuthStateChanged(user => {
+        if (!user) {
+          firebase.auth().signInAnonymously().catch(err => {
+            document.getElementById('gateMessage').innerText =
+              "Không đăng nhập được (" + err.code + "). Kiểm tra mạng hoặc báo quản lý bật đăng nhập Ẩn danh trong Firebase.";
+          });
+          return;
+        }
+        checkMembership().then(ok => {
+          if (ok) startApp();
+          else showGate("Nhập mã cửa hàng để sử dụng.");
+        });
+      });
+    }
+
+    // Báo "ting" khi có toa mới gửi đến nhóm mình đang xem
+    function detectNewOrders() {
+      const fresh = [];
+      orders.forEach(o => {
+        if (!seenOrderIds.has(o.id)) {
+          seenOrderIds.add(o.id);
+          if (ordersLoadedOnce && o.status === 'waiting' &&
+              inAlarm(o.groupName)) fresh.push(o);
+        }
+      });
+      ordersLoadedOnce = true;
+      if (fresh.length) {
+        playNewOrderDing();
+        if (document.hidden) showSystemNotification("📦 Toa gọi hàng mới", `${fresh[0].groupName}: ${fresh[0].note || ''}`);
+      }
+    }
+
+    // Tự xóa toa (và ảnh) cũ hơn 30 ngày — đúng như mô tả "tự xóa sau 30 ngày"
+    function cleanupOldOrders() {
+      const cutoff = Date.now() - KEEP_DAYS * DAY_MS;
+      ordersRef.orderByChild('createdAt').endAt(cutoff).limitToFirst(200).once('value').then(snap => {
+        const updates = {};
+        snap.forEach(child => {
+          updates['orders/' + child.key] = null;
+          updates['orderImages/' + child.key] = null;
+        });
+        if (Object.keys(updates).length) db.ref().update(updates);
+      }).catch(() => {});
+    }
+
+    /* =========================================================
+       6. ẢNH KIOT: DÁN / CHỤP / CHỌN & NÉN
+       ========================================================= */
+    window.addEventListener('paste', (e) => {
+      const items = (e.clipboardData || {}).items || [];
+      for (const item of items) {
+        if (item.type && item.type.indexOf('image') !== -1) {
+          compressAndPreviewImage(item.getAsFile());
+          e.preventDefault();
+          break;
+        }
+      }
+    });
+
+    function onFileImagePicked(e) {
+      if (e.target.files && e.target.files[0]) compressAndPreviewImage(e.target.files[0]);
+      e.target.value = '';
+    }
+
+    function compressAndPreviewImage(file) {
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        let maxDim = 950;
+        let quality = 0.72;
+        let dataUrl = '';
+        // Nén dần đến khi < 80KB
+        for (let i = 0; i < 8; i++) {
+          let w = img.naturalWidth, h = img.naturalHeight;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+            else { w = Math.round(w * maxDim / h); h = maxDim; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          dataUrl = canvas.toDataURL('image/jpeg', quality);
+          if (dataUrl.length * 0.75 < 80 * 1024) break;
+          if (quality > 0.5) quality -= 0.1; else maxDim = Math.round(maxDim * 0.85);
+        }
+        tempCapturedImageBase64 = dataUrl;
+        document.getElementById('compressedImagePreview').src = dataUrl;
+        document.getElementById('imageSizeLabel').innerText = Math.round(dataUrl.length * 0.75 / 1024) + 'KB';
+        document.getElementById('imagePreviewContainer').classList.remove('hidden');
+        document.getElementById('pasteHintContent').classList.add('hidden');
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); alert("Không đọc được ảnh này. Hãy thử ảnh khác (JPG/PNG)."); };
+      img.src = url;
+    }
+
+    function removeCapturedImage(e) {
+      if (e) e.stopPropagation();
+      tempCapturedImageBase64 = null;
+      document.getElementById('compressedImagePreview').src = '';
+      document.getElementById('imagePreviewContainer').classList.add('hidden');
+      document.getElementById('pasteHintContent').classList.remove('hidden');
+    }
+
+    // Lấy ảnh của toa (hỗ trợ cả toa cũ lưu ảnh trực tiếp trong toa)
+    function getOrderImage(order) {
+      if (order.image) return Promise.resolve(order.image);
+      if (!order.hasImage) return Promise.resolve(null);
+      if (imageCache[order.id]) return Promise.resolve(imageCache[order.id]);
+      if (!imageLoading[order.id]) {
+        imageLoading[order.id] = imagesRef.child(order.id).once('value').then(s => {
+          imageCache[order.id] = s.val();
+          return s.val();
+        }).catch(() => null);
+      }
+      return imageLoading[order.id];
+    }
+
+    function hydrateImages(root) {
+      root.querySelectorAll('img[data-order-img]').forEach(el => {
+        const id = el.getAttribute('data-order-img');
+        const order = orders.find(o => o.id === id);
+        if (!order) return;
+        getOrderImage(order).then(src => { if (src) el.src = src; });
+      });
+    }
+
+    function orderImageThumb(order, cls) {
+      if (!order.image && !order.hasImage) return '';
+      const cached = order.image || imageCache[order.id] || '';
+      return `<button type="button" onclick="openImageViewer('${order.id}')" class="block shrink-0">
+        <img data-order-img="${order.id}" src="${cached}" alt="Ảnh Kiot" class="${cls} object-cover rounded-lg border border-slate-200 bg-slate-100">
+      </button>`;
+    }
+
+    function openImageViewer(orderId) {
+      const order = orders.find(o => o.id === orderId);
+      if (!order) return;
+      const el = document.getElementById('viewerImageElement');
+      el.src = order.image || imageCache[order.id] || '';
+      const modal = document.getElementById('modalImageViewer');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      getOrderImage(order).then(src => { if (src) el.src = src; });
+    }
+
+    function closeImageViewerModal() {
+      const modal = document.getElementById('modalImageViewer');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    /* =========================================================
+       7. GỬI TOA / NHẬN TOA / HOÀN TẤT
+       ========================================================= */
+    function ensureGroup(groupName, leaderName) {
+      return groupsRef.transaction(list => {
+        list = Array.isArray(list) ? list : (list ? Object.values(list) : []);
+        const g = list.find(x => x && x.name && x.name.toLowerCase() === groupName.toLowerCase());
+        if (!g) list.push({ name: groupName, leader: leaderName });
+        else if (!g.leader && leaderName) g.leader = leaderName;
+        else return; // không đổi gì
+        return list;
+      });
+    }
+
+    function submitNewOrder() {
+      initAudioContext();
+      const groupInput = document.getElementById('inputGroupName').value.trim();
+      const leaderName = document.getElementById('inputLeaderName').value.trim();
+      const note = document.getElementById('inputOrderNote').value.trim();
+
+      if (!groupInput) { alert("Vui lòng nhập tên nhóm Zalo nhận đơn!"); return; }
+      if (!leaderName) { alert("Vui lòng nhập tên Trưởng nhóm phụ trách!"); return; }
+      if (!tempCapturedImageBase64 && !note) { alert("Vui lòng thêm ảnh Kiot hoặc nhập ghi chú mặt hàng!"); return; }
+
+      // Dùng đúng tên nhóm đã có (tránh "kho lớn" và "Kho Lớn" thành 2 nhóm)
+      const existing = configuredGroups.find(g => g.name.toLowerCase() === groupInput.toLowerCase());
+      const groupName = existing ? existing.name : groupInput;
+
+      const btn = document.getElementById('btnSubmitOrder');
+      btn.disabled = true;
+
+      const newRef = ordersRef.push();   // ID duy nhất, không trùng khi 2 máy gửi cùng lúc
+      const image = tempCapturedImageBase64;
+      const updates = {};
+      updates['orders/' + newRef.key] = {
+        groupName,
+        leaderName,
+        note: note || 'Xem ảnh Kiot đính kèm',
+        hasImage: !!image,
+        status: 'waiting',
+        createdAt: firebase.database.ServerValue.TIMESTAMP   // Giờ máy chủ → đếm ngược đúng trên mọi máy
+      };
+      if (image) {
+        updates['orderImages/' + newRef.key] = image;
+        imageCache[newRef.key] = image;
+      }
+
+      ensureGroup(groupName, leaderName).catch(() => {});
+      db.ref().update(updates).then(() => {
+        document.getElementById('inputOrderNote').value = '';
+        removeCapturedImage();
+        if (!inView(groupName)) {
+          activeFilterGroup = groupName;
+          renderAll();
+        }
+      }).catch(err => {
+        alert("Lỗi kết nối máy chủ: " + err.message);
+      }).finally(() => { btn.disabled = false; });
+    }
+
+    function acceptOrderWithStaff(orderId) {
+      initAudioContext();
+      const inputEl = document.getElementById('staff_input_' + orderId);
+      const staffName = inputEl ? inputEl.value.trim() : "";
+
+      if (!staffName) {
+        alert("Vui lòng điền tên bạn nhận toa (Ví dụ: Khánh, Đô, Việt...)!");
+        if (inputEl) inputEl.focus();
+        return;
+      }
+      storage.set('app_my_name', staffName);
+
+      if (!knownStaffs.includes(staffName)) {
+        staffsRef.transaction(list => {
+          list = Array.isArray(list) ? list : (list ? Object.values(list) : []);
+          if (list.includes(staffName)) return;
+          list.push(staffName);
+          return list;
+        });
+      }
+
+      // Transaction: 2 người bấm nhận cùng lúc thì chỉ 1 người được
+      ordersRef.child(orderId).transaction(cur => {
+        if (cur === null) return null;
+        if (cur.status !== 'waiting') return; // hủy
+        cur.status = 'doing';
+        cur.receiver = staffName;
+        cur.acceptedAt = nowServer();
+        return cur;
+      }, (err, committed, snap) => {
+        if (err) { alert("Lỗi: " + err.message); return; }
+        if (!committed) {
+          const v = snap && snap.val();
+          if (v && v.receiver) alert(`Toa này đã được ${v.receiver} nhận trước.`);
+        }
+      }, false);
+    }
+
+    function finishOrder(orderId) {
+      initAudioContext();
+      ordersRef.child(orderId).update({ status: 'done', finishedAt: nowServer() })
+        .catch(err => alert("Lỗi: " + err.message));
+    }
+
+    function cancelOrder(orderId) {
+      if (!confirm("Hủy toa này? (toa sẽ bị xóa hẳn)")) return;
+      const updates = {};
+      updates['orders/' + orderId] = null;
+      updates['orderImages/' + orderId] = null;
+      db.ref().update(updates);
+    }
+
+    function openPinModal() {
+      const list = document.getElementById('pinGroupList');
+      if (!configuredGroups.length) {
+        list.innerHTML = '<p class="text-xs text-slate-400 text-center py-6">Chưa có nhóm nào. Hãy thêm nhóm trước.</p>';
+      } else {
+        list.innerHTML = configuredGroups.map((g, i) => `
+          <label class="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer">
+            <input type="checkbox" class="pin-check w-5 h-5 accent-blue-600" data-idx="${i}" ${pinnedGroups.includes(g.name) ? 'checked' : ''}>
+            <span class="text-sm font-bold text-slate-800 flex-1">${escapeHtml(g.name)}</span>
+            <span class="text-[11px] text-slate-400">${escapeHtml(g.leader || '')}</span>
+          </label>`).join('');
+      }
+      const m = document.getElementById('modalPinGroups');
+      m.classList.remove('hidden'); m.classList.add('flex');
+      refreshIcons();
+    }
+
+    function closePinModal() {
+      const m = document.getElementById('modalPinGroups');
+      m.classList.add('hidden'); m.classList.remove('flex');
+    }
+
+    function setAllPinChecks(v) {
+      document.querySelectorAll('.pin-check').forEach(c => { c.checked = v; });
+    }
+
+    function savePinModal() {
+      pinnedGroups = Array.from(document.querySelectorAll('.pin-check'))
+        .filter(c => c.checked)
+        .map(c => configuredGroups[+c.dataset.idx] && configuredGroups[+c.dataset.idx].name)
+        .filter(Boolean);
+      savePinnedGroups();
+      activeFilterGroup = 'ALL';
+      closePinModal();
+      renderAll();
+    }
+
+    /* =========================================================
+       8. ĐẾM NGƯỢC 60 GIÂY & BÁO ĐỘNG
+       ========================================================= */
+    function elapsedSecOf(o) { return Math.floor((nowServer() - o.createdAt) / 1000); }
+    function isOverdue(o) { return o.status === 'waiting' && elapsedSecOf(o) >= DEADLINE_SEC; }
+
+    function evaluateTimersAndAlerts() {
+      orders.forEach(order => {
+        if (order.status === 'waiting') {
+          const timerBadge = document.getElementById('timer_' + order.id);
+          const cardBox = document.getElementById('card_' + order.id);
+          if (!timerBadge || !cardBox) return;
+          const remainSec = DEADLINE_SEC - elapsedSecOf(order);
+          if (remainSec > 0) {
+            timerBadge.innerText = `00:${String(remainSec).padStart(2, '0')}`;
+            timerBadge.className = 'text-xs font-black text-amber-700 bg-amber-100 px-2.5 py-0.5 rounded-full tabular-nums';
+            cardBox.classList.remove('card-urgent-alert');
+          } else {
+            timerBadge.innerText = `QUÁ HẠN +${Math.abs(remainSec)}s`;
+            timerBadge.className = 'text-xs font-black text-white bg-rose-600 px-2.5 py-0.5 rounded-full shadow-sm tabular-nums';
+            cardBox.classList.add('card-urgent-alert');
+          }
+        } else if (order.status === 'doing') {
+          const el = document.getElementById('doing_' + order.id);
+          if (el && order.acceptedAt) el.innerText = 'Đang soạn ' + fmtDuration(nowServer() - order.acceptedAt);
+        }
+      });
+
+      // Chớp đỏ tab nhóm có toa quá hạn
+      configuredGroups.forEach((grp, idx) => {
+        const tabEl = document.getElementById('tab_group_' + idx);
+        if (!tabEl) return;
+        tabEl.classList.toggle('tab-urgent-alert', orders.some(o => o.groupName === grp.name && isOverdue(o)));
+      });
+
+      // Chuông + nhấp nháy tiêu đề (chỉ cho nhóm đang xem / đã ghim)
+      const overdueList = orders.filter(o =>
+        isOverdue(o) && inAlarm(o.groupName)
+      );
+
+      if (overdueList.length) {
+        startAlarmSystem();
+        startTabBlinking();
+        overdueList.forEach(o => {
+          if (!notifiedOverdueIds.has(o.id)) {
+            notifiedOverdueIds.add(o.id);
+            showSystemNotification("🔴 TOA QUÁ HẠN CHƯA NHẬN", `${o.groupName} — Trưởng nhóm: ${o.leaderName || ''}`);
+          }
+        });
+      } else {
+        stopAlarmSystem();
+        stopTabBlinking();
+      }
+    }
+
+    setInterval(evaluateTimersAndAlerts, 1000);
+
+    /* =========================================================
+       9. GIAO DIỆN
+       ========================================================= */
+    function renderAll() {
+      renderSuggestionDatalists();
+      renderGroupTabs();
+      renderLiveCards();
+      if (currentMainTab === 'history') renderHistoryTable();
+      renderSoundUI();
+      evaluateTimersAndAlerts();
+      refreshIcons();
+    }
+
+    function renderSuggestionDatalists() {
+      document.getElementById('suggestedGroups').innerHTML =
+        configuredGroups.map(g => `<option value="${escapeHtml(g.name)}">`).join('');
+
+      const distinctLeaders = Array.from(new Set(configuredGroups.map(g => g.leader).filter(Boolean)));
+      document.getElementById('suggestedLeaders').innerHTML =
+        distinctLeaders.map(l => `<option value="${escapeHtml(l)}">`).join('');
+
+      document.getElementById('suggestedStaffs').innerHTML =
+        knownStaffs.map(s => `<option value="${escapeHtml(s)}">`).join('');
+
+      // Bỏ các nhóm đã bị xóa khỏi danh sách theo dõi
+      if (configuredGroups.length) {
+        const names = configuredGroups.map(g => g.name);
+        const kept = pinnedGroups.filter(n => names.includes(n));
+        if (kept.length !== pinnedGroups.length) { pinnedGroups = kept; savePinnedGroups(); }
+      }
+      document.getElementById('pinBtnText').innerText = pinnedGroups.length === 0
+        ? 'Máy này theo dõi: Tất cả nhóm'
+        : pinnedGroups.length <= 2
+          ? 'Máy này theo dõi: ' + pinnedGroups.join(', ')
+          : `Máy này theo dõi: ${pinnedGroups.length} nhóm`;
+    }
+
+    function renderGroupTabs() {
+      const container = document.getElementById('groupTabsContainer');
+      let html = `
+        <button onclick="setTabFilter(-1)" class="px-3.5 py-2 sm:py-1.5 rounded-full text-xs font-bold transition whitespace-nowrap ${activeFilterGroup === 'ALL' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
+          ${pinnedGroups.length ? `NHÓM CỦA MÁY (${pinnedGroups.length})` : 'TẤT CẢ'}
+        </button>`;
+
+      // Nhóm máy này theo dõi xếp lên trước
+      const tabOrder = configuredGroups.map((g, i) => i)
+        .sort((a, b) => (pinnedGroups.includes(configuredGroups[b].name) ? 1 : 0) - (pinnedGroups.includes(configuredGroups[a].name) ? 1 : 0));
+      tabOrder.forEach(idx => {
+        const grp = configuredGroups[idx];
+        const isPinned = pinnedGroups.includes(grp.name);
+        const isSelected = grp.name === activeFilterGroup;
+        const waitingCount = orders.filter(o => o.groupName === grp.name && o.status === 'waiting').length;
+        html += `
+          <div id="tab_group_${idx}" class="inline-flex items-center rounded-full transition shrink-0 ${isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
+            <button onclick="setTabFilter(${idx})" class="pl-3.5 pr-1.5 py-2 sm:py-1.5 text-xs font-bold whitespace-nowrap focus:outline-none flex items-center gap-1">
+              ${isPinned ? '<i data-lucide="pin" class="w-3 h-3"></i>' : ''}${escapeHtml(grp.name)}
+              ${waitingCount ? `<span class="bg-amber-400 text-slate-900 text-[10px] px-1.5 rounded-full font-black">${waitingCount}</span>` : ''}
+            </button>
+            <button onclick="openEditGroupModal(${idx}, event)" title="Sửa tên nhóm / Đổi trưởng nhóm" class="pr-2.5 pl-1 py-2 sm:py-1.5 opacity-60 hover:opacity-100 transition focus:outline-none">
+              <i data-lucide="pen-line" class="w-3 h-3"></i>
+            </button>
+          </div>`;
+      });
+
+      html += `
+        <button onclick="openAddNewGroupModal()" class="px-3.5 py-2 sm:py-1.5 rounded-full text-xs font-black transition whitespace-nowrap bg-blue-50 text-blue-700 hover:bg-blue-100 border border-dashed border-blue-400 flex items-center gap-1 shrink-0">
+          <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+          <span>${configuredGroups.length === 0 ? 'Thêm Nhóm Zalo Đầu Tiên' : 'Thêm Nhóm'}</span>
+        </button>`;
+
+      container.innerHTML = html;
+    }
+
+    function setTabFilter(idx) {
+      if (idx < 0) {
+        activeFilterGroup = "ALL";
+      } else {
+        const found = configuredGroups[idx];
+        if (!found) return;
+        activeFilterGroup = found.name;
+        document.getElementById('inputGroupName').value = found.name;
+        document.getElementById('inputLeaderName').value = found.leader || "";
+      }
+      renderAll();
+    }
+
+    /* ---- Modal nhóm ---- */
+    function showGroupModal() {
+      const m = document.getElementById('modalEditGroup');
+      m.classList.remove('hidden');
+      m.classList.add('flex');
+      refreshIcons();
+    }
+
+    function openAddNewGroupModal() {
+      document.getElementById('modalEditGroupTitle').innerText = 'Thêm Nhóm Zalo Mới';
+      document.getElementById('editGroupOriginalName').value = "";
+      document.getElementById('editGroupNameInput').value = "";
+      document.getElementById('editGroupLeaderInput').value = "";
+      document.getElementById('btnDeleteGroupModal').classList.add('invisible');
+      showGroupModal();
+      document.getElementById('editGroupNameInput').focus();
+    }
+
+    function openEditGroupModal(idx, evt) {
+      if (evt) evt.stopPropagation();
+      const found = configuredGroups[idx];
+      if (!found) return;
+      document.getElementById('modalEditGroupTitle').innerText = 'Sửa Tên & Trưởng Nhóm';
+      document.getElementById('editGroupOriginalName').value = found.name;
+      document.getElementById('editGroupNameInput').value = found.name;
+      document.getElementById('editGroupLeaderInput').value = found.leader || "";
+      document.getElementById('btnDeleteGroupModal').classList.remove('invisible');
+      showGroupModal();
+    }
+
+    function closeEditGroupModal() {
+      const m = document.getElementById('modalEditGroup');
+      m.classList.add('hidden');
+      m.classList.remove('flex');
+    }
+
+    function saveGroupDetails() {
+      const origName = document.getElementById('editGroupOriginalName').value;
+      const newName = document.getElementById('editGroupNameInput').value.trim();
+      const newLeader = document.getElementById('editGroupLeaderInput').value.trim();
+
+      if (!newName) { alert("Vui lòng nhập tên nhóm Zalo!"); return; }
+
+      const duplicate = configuredGroups.some(g =>
+        g.name.toLowerCase() === newName.toLowerCase() && g.name !== origName);
+      if (duplicate) { alert("Tên nhóm này đã tồn tại!"); return; }
+
+      groupsRef.transaction(list => {
+        list = Array.isArray(list) ? list : (list ? Object.values(list) : []);
+        if (origName) {
+          const g = list.find(x => x && x.name === origName);
+          if (g) { g.name = newName; g.leader = newLeader; }
+        } else {
+          list.push({ name: newName, leader: newLeader });
+        }
+        return list;
+      }).then(() => {
+        // Đổi tên nhóm thì chuyển luôn các toa đang có sang tên mới (không bị "mất" toa)
+        if (origName && origName !== newName) {
+          const updates = {};
+          orders.filter(o => o.groupName === origName).forEach(o => {
+            updates['orders/' + o.id + '/groupName'] = newName;
+          });
+          if (Object.keys(updates).length) db.ref().update(updates);
+          if (pinnedGroups.includes(origName)) { pinnedGroups = pinnedGroups.map(n => n === origName ? newName : n); savePinnedGroups(); }
+          if (activeFilterGroup === origName) activeFilterGroup = newName;
+        }
+        if (!origName) activeFilterGroup = newName;
+        closeEditGroupModal();
+        document.getElementById('inputGroupName').value = newName;
+        document.getElementById('inputLeaderName').value = newLeader;
+        renderAll();
+      }).catch(err => alert("Lỗi lưu nhóm: " + err.message));
+    }
+
+    function deleteCurrentGroup() {
+      const origName = document.getElementById('editGroupOriginalName').value;
+      if (!origName) return;
+      if (!confirm(`Bạn có chắc muốn xóa nhóm "${origName}" khỏi hệ thống?`)) return;
+
+      groupsRef.transaction(list => {
+        list = Array.isArray(list) ? list : (list ? Object.values(list) : []);
+        return list.filter(g => g && g.name !== origName);
+      }).then(() => {
+        if (activeFilterGroup === origName) activeFilterGroup = "ALL";
+        if (pinnedGroups.includes(origName)) { pinnedGroups = pinnedGroups.filter(n => n !== origName); savePinnedGroups(); }
+        closeEditGroupModal();
+        renderAll();
+      });
+    }
+
+    /* ---- Thẻ toa đang xử lý ---- */
+    function renderLiveCards() {
+      const container = document.getElementById('liveOrderCardsGrid');
+      const emptyPrompt = document.getElementById('liveOrdersEmptyPrompt');
+
+      const filtered = orders.filter(o => {
+        if (o.status === 'done') return false;
+        if (!inView(o.groupName)) return false;
+        return true;
+      }).sort((a, b) => {
+        // Toa chờ nhận lên trước, cũ nhất trước (gấp nhất)
+        if (a.status !== b.status) return a.status === 'waiting' ? -1 : 1;
+        return a.createdAt - b.createdAt;
+      });
+
+      document.getElementById('liveOrdersBadgeCount').innerText = filtered.length;
+
+      // Giữ lại tên đang gõ dở & ô đang focus (trước đây bị xóa mỗi khi có dữ liệu mới)
+      const typed = {};
+      container.querySelectorAll('input[id^="staff_input_"]').forEach(el => { typed[el.id] = el.value; });
+      const focusedId = document.activeElement && document.activeElement.id;
+
+      if (!filtered.length) {
+        container.innerHTML = '';
+        emptyPrompt.classList.remove('hidden');
+        return;
+      }
+      emptyPrompt.classList.add('hidden');
+
+      const myName = storage.get('app_my_name') || '';
+
+      container.innerHTML = filtered.map(o => {
+        const header = `
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <div class="text-[11px] font-black text-blue-700 uppercase truncate">${escapeHtml(o.groupName)}</div>
+              <div class="text-[11px] text-slate-500">TN: <b class="text-slate-700">${escapeHtml(o.leaderName || '—')}</b> • Gọi lúc ${fmtTime(o.createdAt)}</div>
+            </div>
+            ${o.status === 'waiting'
+              ? `<span id="timer_${o.id}" class="text-xs font-black text-amber-700 bg-amber-100 px-2.5 py-0.5 rounded-full tabular-nums shrink-0">00:60</span>`
+              : `<span class="text-xs font-black text-white bg-blue-600 px-2.5 py-0.5 rounded-full shrink-0">ĐANG SOẠN</span>`}
+          </div>`;
+
+        const body = `
+          <div class="flex gap-3">
+            ${orderImageThumb(o, 'w-20 h-20')}
+            <p class="text-sm text-slate-800 font-semibold whitespace-pre-wrap break-words flex-1">${escapeHtml(o.note)}</p>
+          </div>`;
+
+        let footer;
+        if (o.status === 'waiting') {
+          const inputId = 'staff_input_' + o.id;
+          const val = typed[inputId] ?? myName;
+          footer = `
+            <div class="flex gap-2">
+              <input id="${inputId}" list="suggestedStaffs" autocomplete="off" value="${escapeHtml(val)}" placeholder="Tên bạn..."
+                onkeydown="if(event.key==='Enter') acceptOrderWithStaff('${o.id}')"
+                class="flex-1 min-w-0 text-base sm:text-xs font-bold p-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
+              <button onclick="acceptOrderWithStaff('${o.id}')" class="bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-black text-xs px-4 rounded-xl transition whitespace-nowrap">NHẬN TOA</button>
+            </div>`;
+        } else {
+          footer = `
+            <div class="flex items-center justify-between gap-2">
+              <div class="text-xs text-slate-600">
+                <b class="text-blue-700">${escapeHtml(o.receiver || '')}</b> nhận lúc ${fmtTime(o.acceptedAt)}<br>
+                <span id="doing_${o.id}" class="text-slate-500 tabular-nums"></span>
+              </div>
+              <button onclick="finishOrder('${o.id}')" class="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs px-4 py-2.5 rounded-xl transition whitespace-nowrap flex items-center gap-1">
+                <i data-lucide="check" class="w-4 h-4"></i> SOẠN XONG
+              </button>
+            </div>`;
+        }
+
+        return `
+          <div id="card_${o.id}" class="bg-white rounded-2xl border-2 ${o.status === 'waiting' ? 'border-amber-300' : 'border-blue-300'} p-3.5 flex flex-col gap-3 shadow-sm relative">
+            ${header}
+            ${body}
+            ${footer}
+            ${o.status === 'waiting' ? `<button onclick="cancelOrder('${o.id}')" class="self-end -mt-1 text-[11px] text-slate-400 hover:text-rose-600 underline">Hủy toa gửi nhầm</button>` : ''}
+          </div>`;
+      }).join('');
+
+      hydrateImages(container);
+      if (focusedId && focusedId.startsWith('staff_input_')) {
+        const el = document.getElementById(focusedId);
+        if (el) { el.focus(); const n = el.value.length; try { el.setSelectionRange(n, n); } catch (e) {} }
+      }
+    }
+
+    /* ---- Lịch sử ---- */
+    function renderHistoryTable() {
+      const dateInput = document.getElementById('historyDateFilterInput');
+      if (!dateInput.value) dateInput.value = localDateKey(Date.now());
+      const day = dateInput.value;
+
+      const list = orders.filter(o =>
+        o.status === 'done' &&
+        localDateKey(o.finishedAt || o.createdAt) === day &&
+        inView(o.groupName)
+      ).sort((a, b) => (b.finishedAt || 0) - (a.finishedAt || 0));
+
+      const tbody = document.getElementById('historyTableRecordsBody');
+      const mobile = document.getElementById('historyCardsMobile');
+      document.getElementById('historyEmptyPrompt').classList.toggle('hidden', list.length > 0);
+
+      const statusBadge = (o) => {
+        const wait = o.acceptedAt ? o.acceptedAt - o.createdAt : null;
+        if (wait != null && wait <= DEADLINE_SEC * 1000)
+          return `<span class="bg-emerald-100 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded-full">ĐÚNG HẠN</span>`;
+        return `<span class="bg-rose-100 text-rose-700 text-[10px] font-black px-2 py-0.5 rounded-full">TRỄ ${wait != null ? fmtDuration(wait - DEADLINE_SEC * 1000) : ''}</span>`;
+      };
+
+      tbody.innerHTML = list.map(o => `
+        <tr class="align-top">
+          <td class="p-3"><div class="font-black text-slate-800">${escapeHtml(o.groupName)}</div><div class="text-[10px] text-slate-400">TN: ${escapeHtml(o.leaderName || '—')}</div></td>
+          <td class="p-3">${orderImageThumb(o, 'w-14 h-14') || '<span class="text-slate-300">—</span>'}</td>
+          <td class="p-3 max-w-[220px] whitespace-pre-wrap break-words">${escapeHtml(o.note)}</td>
+          <td class="p-3 tabular-nums">${fmtTime(o.createdAt)}</td>
+          <td class="p-3"><b class="text-blue-700">${escapeHtml(o.receiver || '—')}</b><div class="text-[10px] text-slate-400">nhận sau ${fmtDuration(o.acceptedAt - o.createdAt)}</div></td>
+          <td class="p-3 tabular-nums">${fmtTime(o.finishedAt)}<div class="text-[10px] text-slate-400">soạn ${fmtDuration(o.finishedAt - o.acceptedAt)}</div></td>
+          <td class="p-3 text-center">${statusBadge(o)}</td>
+        </tr>`).join('');
+
+      mobile.innerHTML = list.map(o => `
+        <div class="border border-slate-200 rounded-xl p-3 flex gap-3">
+          ${orderImageThumb(o, 'w-16 h-16')}
+          <div class="flex-1 min-w-0 text-xs">
+            <div class="flex items-center justify-between gap-2">
+              <b class="text-slate-800 truncate">${escapeHtml(o.groupName)}</b>${statusBadge(o)}
+            </div>
+            <p class="text-slate-600 mt-0.5 break-words">${escapeHtml(o.note)}</p>
+            <div class="text-[11px] text-slate-500 mt-1">
+              Gọi ${fmtTime(o.createdAt)} • <b class="text-blue-700">${escapeHtml(o.receiver || '—')}</b> nhận sau ${fmtDuration(o.acceptedAt - o.createdAt)} • xong ${fmtTime(o.finishedAt)}
+            </div>
+          </div>
+        </div>`).join('');
+
+      const view = document.getElementById('viewHistoryArchive');
+      hydrateImages(view);
+    }
+
+    function switchMainTab(tab) {
+      currentMainTab = tab;
+      const isActive = tab === 'active';
+      document.getElementById('viewActiveDispatch').classList.toggle('hidden', !isActive);
+      document.getElementById('viewHistoryArchive').classList.toggle('hidden', isActive);
+      const on = "px-3 py-1.5 sm:py-1 bg-white text-blue-700 rounded-lg text-xs font-bold shadow-sm transition";
+      const off = "px-3 py-1.5 sm:py-1 text-slate-600 hover:text-slate-900 rounded-lg text-xs font-bold transition";
+      document.getElementById('btnTabActive').className = isActive ? on : off;
+      document.getElementById('btnTabHistory').className = isActive ? off : on;
+      if (!isActive) renderHistoryTable();
+    }
+
+    /* =========================================================
+       10. KHỞI ĐỘNG
+       ========================================================= */
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { closeImageViewerModal(); closeEditGroupModal(); closePinModal(); }
+    });
+
+    // Trên điện thoại, máy đã ghim nhóm (máy của người soạn hàng) thì thu gọn khung tạo toa
+    const details = document.getElementById('createFormDetails');
+    const lgQuery = window.matchMedia('(min-width: 1024px)');
+    if (!lgQuery.matches && pinnedGroups.length) details.open = false;
+    details.querySelector('summary').addEventListener('click', e => { if (lgQuery.matches) e.preventDefault(); });
+    lgQuery.addEventListener && lgQuery.addEventListener('change', q => { if (q.matches) details.open = true; });
+
+    switchMainTab('active');
+    renderSoundUI();
+    updateNotifyButton();
+    renderWakeLockUI();
+    if (wantWakeLock) requestWakeLock();
+    renderAll();
+    initAuth();
+  </script>
+</body>
+</html>
